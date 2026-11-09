@@ -7,6 +7,7 @@
     "name": "Northstar Robotics",
     "sector": "Test Company · Robotics",
     "summary": "A fictional robotics company seeking funding to build a small pilot production line.",
+    "winnerBriefing": "Northstar has secured a signed pilot order from a regional logistics operator. The first production line is already designed, but delivery milestones depend on reliable component supply. Winning teams may use this briefing when discussing the deal with the event team.",
     "principalRequired": 200000,
     "minimumFundingRatio": 0.7,
     "maximumRate": 16
@@ -19,6 +20,7 @@
     "name": "Cedar Grove Foods",
     "sector": "Test Company · Food",
     "summary": "A fictional food producer seeking capital to expand its regional distribution network.",
+    "winnerBriefing": "Cedar Grove has a growing base of repeat wholesale customers. Its expansion plan depends on refrigerated distribution capacity and careful working-capital management during seasonal demand peaks.",
     "principalRequired": 150000,
     "minimumFundingRatio": 0.6,
     "maximumRate": 14
@@ -31,6 +33,7 @@
     "name": "Blueglass Energy",
     "sector": "Test Company · Clean Energy",
     "summary": "A fictional clean-energy startup seeking a loan to install a demonstration facility.",
+    "winnerBriefing": "Blueglass has obtained a site permit for its demonstration facility and is negotiating a long-term power purchase agreement. Equipment lead times and the timing of that agreement remain important execution risks.",
     "principalRequired": 250000,
     "minimumFundingRatio": 0.8,
     "maximumRate": 18
@@ -43,6 +46,7 @@
     "name": "Maple Cloud Services",
     "sector": "Test Company · Cloud Software",
     "summary": "A fictional software provider seeking funding to add capacity for new business customers.",
+    "winnerBriefing": "Maple Cloud has signed multi-year contracts with several mid-sized customers. The company plans to spend the loan on additional hosting capacity and customer support before onboarding those accounts.",
     "principalRequired": 180000,
     "minimumFundingRatio": 0.7,
     "maximumRate": 15
@@ -55,6 +59,7 @@
     "name": "Harbor Health Labs",
     "sector": "Test Company · Healthcare",
     "summary": "A fictional health technology company seeking capital to expand a diagnostic pilot.",
+    "winnerBriefing": "Harbor Health's pilot has received positive feedback from two clinic networks. A larger rollout depends on completing integration testing and meeting each clinic's procurement requirements.",
     "principalRequired": 220000,
     "minimumFundingRatio": 0.75,
     "maximumRate": 17
@@ -67,6 +72,7 @@
     "name": "Orchard Mobility",
     "sector": "Test Company · Transportation",
     "summary": "A fictional mobility company seeking debt financing to expand its electric delivery fleet.",
+    "winnerBriefing": "Orchard Mobility has conditional fleet commitments from three local delivery operators. Vehicle availability and charging access are the key dependencies before those commitments become active contracts.",
     "principalRequired": 240000,
     "minimumFundingRatio": 0.7,
     "maximumRate": 19

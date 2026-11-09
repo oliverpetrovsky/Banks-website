@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="description" content="Banks & Bloodlines team auction panel.">
+    <title>Team Panel — Banks &amp; Bloodlines</title>
+    <link rel="stylesheet" href="/app.css">
+    <script src="/team.js" defer></script>
+  </head>
+  <body data-page="team">
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="wordmark" href="/" aria-label="Banks & Bloodlines home"><img class="wordmark-icon" src="/SynLogo.png" alt=""><span>BANKS &amp; BLOODLINES<span class="wordmark-sub">TEAM AUCTION PANEL</span></span></a>
+        <nav class="site-nav" aria-label="Main navigation">
+          <a class="nav-link" href="/">LEADERBOARD</a><a class="nav-link is-active" href="/team">TEAM PANEL</a><a class="nav-link" href="/admin">ADMIN</a>
+        </nav>
+      </header>
+      <main class="panel-main team-main">
+        <section class="panel-heading">
+          <p class="eyebrow"><span class="eyebrow-line"></span> ROUND 01 / THE BANKING SYNDICATE</p>
+          <h1>Your <em>team panel.</em></h1>
+          <p>Sign in to follow the live auction, preview your BVI, and place bids.</p>
+        </section>
+        <section id="team-login-card" class="auth-card compact-auth">
+          <div class="auth-copy"><span class="panel-index">TEAM ACCESS</span><h2>Sign in to your syndicate</h2><p>Use your registered team name and the access code provided by E-Cell.</p></div>
+          <form id="participant-login" class="auth-form">
+            <label><span>TEAM NAME</span><input name="team" maxlength="35" autocomplete="organization" required placeholder="Registered team name"></label>
+            <label><span>TEAM ACCESS CODE</span><input name="code" type="password" autocomplete="current-password" required placeholder="Team access code"></label>
+            <button class="button button-primary" type="submit">SIGN IN <span aria-hidden="true">→</span></button>
+            <p class="form-message" aria-live="polite"></p>
+          </form>
+        </section>
+        <section id="team-dashboard" hidden>
+          <div class="panel-toolbar">
+            <div><span class="panel-index">SIGNED IN AS</span><strong id="participant-team-name"></strong></div>
+            <button class="button button-ghost" id="participant-logout" type="button">SIGN OUT</button>
+          </div>
+          <section class="team-results-section" id="team-results-section" hidden>
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> AWARDED DEALS</p><h2>Your winning bids</h2></div></div>
+            <div id="team-results" class="team-results"></div>
+          </section>
+          <section class="team-auction">
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> LIVE DEAL ROOM</p><h2 id="team-auction-title">Waiting for the auction</h2></div><span id="team-auction-status" class="auction-status-card"><i class="status-pip"></i><span>WAITING</span></span></div>
+            <div id="auction-waiting" class="waiting-panel"><span class="waiting-signal" aria-hidden="true"></span><div><h3>The next company will appear here.</h3><p>Stay signed in. Your bid panel opens when the admin starts an auction.</p></div></div>
+            <div id="active-deal" class="active-deal" hidden>
+              <div class="deal-heading">
+                <div><span class="deal-meta" id="deal-meta"></span><h3 id="deal-name"></h3><span class="company-sector" id="deal-sector"></span><p class="company-summary" id="deal-summary"></p></div>
+                <div class="deal-financials" id="deal-financials"></div>
+              </div>
+              <div class="deal-workspace">
+                <form id="bid-form" class="bid-form">
+                  <div class="bid-form-heading" id="bid-form-heading"><span>YOUR OFFER</span><span>Adjust your terms to preview your BVI.</span></div>
+                  <label><span>PRINCIPAL OFFERED (₹)</span><input name="principal" type="number" step="10000" required></label>
+                  <label><span>ANNUAL INTEREST RATE (%)</span><input name="ratePercent" type="number" step="0.5" required></label>
+                  <div class="bvi-preview" aria-live="polite"><span>YOUR LIVE BVI</span><strong id="bvi-value">—</strong><span id="rank-preview">Adjust your offer to preview your standing.</span></div>
+                  <button class="button button-primary bid-submit" type="submit">SUBMIT BID <span aria-hidden="true">→</span></button>
+                  <p id="bid-message" class="form-message" aria-live="polite"></p>
+                </form>
+                <div class="live-board"><div class="live-board-heading"><div><span class="eyebrow">CURRENT STANDINGS</span><h3>Top bids</h3></div><span class="live-indicator"><i></i> LIVE</span></div><ol id="participant-leaderboard" class="leaderboard-list"></ol><p id="participant-board-empty" class="admin-empty" hidden>No bids yet.</p></div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+      <footer class="footer"><a class="wordmark footer-mark" href="/"><img class="wordmark-icon" src="/SynLogo.png" alt=""><span>BANKS &amp; BLOODLINES<span class="wordmark-sub">SYNERGY COLLEGE FEST</span></span></a><div class="footer-organizer"><span>CONDUCTED BY</span><img class="ecell-logo" src="/ecell-logo(withoutBG).png" alt="E-Cell"></div></footer>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

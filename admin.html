@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f0f0f">
+    <meta name="description" content="Banks & Bloodlines event administration.">
+    <title>Admin — Banks &amp; Bloodlines</title>
+    <link rel="stylesheet" href="/app.css">
+    <script src="/admin.js" defer></script>
+  </head>
+  <body data-page="admin">
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="wordmark" href="/" aria-label="Banks & Bloodlines home"><img class="wordmark-icon" src="/SynLogo.png" alt=""><span>BANKS &amp; BLOODLINES<span class="wordmark-sub">EVENT ADMINISTRATION</span></span></a>
+        <nav class="site-nav" aria-label="Main navigation">
+          <a class="nav-link" href="/">LEADERBOARD</a><a class="nav-link" href="/team">TEAM PANEL</a><a class="nav-link is-active" href="/admin">ADMIN</a>
+        </nav>
+      </header>
+      <main class="panel-main">
+        <section class="panel-heading">
+          <p class="eyebrow"><span class="eyebrow-line"></span> E-CELL EVENT CONTROL</p>
+          <h1>Admin <em>panel.</em></h1>
+          <p>Prepare team access and run one company auction at a time.</p>
+        </section>
+        <section id="admin-login-card" class="auth-card compact-auth">
+          <form id="admin-login" class="auth-form">
+            <label><span>ADMIN PASSWORD</span><input name="password" type="password" autocomplete="current-password" required></label>
+            <button class="button button-primary" type="submit">SIGN IN <span aria-hidden="true">→</span></button>
+            <p class="form-message" aria-live="polite"></p>
+          </form>
+        </section>
+        <section id="admin-dashboard" hidden>
+          <div class="panel-toolbar">
+            <div><span class="panel-index">LIVE AUCTION STATUS</span><strong id="admin-auction-status">Loading…</strong></div>
+            <div class="button-row"><button class="button button-ghost" id="admin-refresh" type="button">REFRESH</button><button class="button button-outline" id="admin-logout" type="button">SIGN OUT</button></div>
+          </div>
+          <div class="admin-columns">
+            <section class="admin-panel">
+              <span class="panel-index">01 / TEAM ACCESS</span><h2>Issue team login</h2>
+              <p>Create one account per registered team. Share its access code privately; the code is only displayed once.</p>
+              <form id="team-create-form" class="stack-form">
+                <label><span>TEAM NAME</span><input name="name" maxlength="35" required placeholder="Registered team name"></label>
+                <button class="button button-primary" type="submit">CREATE TEAM CODE <span aria-hidden="true">→</span></button>
+                <div id="team-code-result" class="team-code-result" hidden></div>
+                <p class="form-message" aria-live="polite"></p>
+              </form>
+              <div class="team-list-heading"><span>REGISTERED TEAMS</span><strong id="team-count">0</strong></div>
+              <ul id="admin-team-list" class="simple-list"></ul>
+            </section>
+            <section class="admin-panel">
+              <span class="panel-index">02 / COMPANY CONTROL</span><h2>Run an auction</h2>
+              <p>Start the selected company or close the live auction to confirm its top BVI bid as the winner.</p>
+              <form id="auction-control-form" class="stack-form">
+                <label><span>ERA</span><select name="era"></select></label>
+                <label><span>COMPANY</span><select name="companyId"></select></label>
+                <div class="button-row"><button class="button button-primary" type="submit">START COMPANY</button><button class="button button-danger" id="close-auction" type="button">CLOSE &amp; AWARD</button></div>
+                <p class="form-message" aria-live="polite"></p>
+              </form>
+            </section>
+          </div>
+          <section class="admin-board-section">
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> CURRENT COMPANY</p><h2 id="admin-board-title">No auction selected</h2></div><span class="live-indicator"><i></i> LIVE</span></div>
+            <p id="admin-board-caption" class="public-board-note">Start an auction to see the current standings.</p>
+            <div id="admin-live-board" class="admin-live-board"></div>
+          </section>
+        </section>
+      </main>
+      <footer class="footer"><a class="wordmark footer-mark" href="/"><img class="wordmark-icon" src="/SynLogo.png" alt=""><span>BANKS &amp; BLOODLINES<span class="wordmark-sub">SYNERGY COLLEGE FEST</span></span></a><div class="footer-organizer"><span>CONDUCTED BY</span><img class="ecell-logo" src="/ecell-logo(withoutBG).png" alt="E-Cell"></div></footer>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
