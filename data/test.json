@@ -1,0 +1,74 @@
+[
+  {
+    "id": "T1-01",
+    "era": "ERA_1",
+    "eraName": "Test Era One",
+    "decade": "TEST",
+    "name": "Northstar Robotics",
+    "sector": "Test Company · Robotics",
+    "summary": "A fictional robotics company seeking funding to build a small pilot production line.",
+    "principalRequired": 200000,
+    "minimumFundingRatio": 0.7,
+    "maximumRate": 16
+  },
+  {
+    "id": "T1-02",
+    "era": "ERA_1",
+    "eraName": "Test Era One",
+    "decade": "TEST",
+    "name": "Cedar Grove Foods",
+    "sector": "Test Company · Food",
+    "summary": "A fictional food producer seeking capital to expand its regional distribution network.",
+    "principalRequired": 150000,
+    "minimumFundingRatio": 0.6,
+    "maximumRate": 14
+  },
+  {
+    "id": "T1-03",
+    "era": "ERA_1",
+    "eraName": "Test Era One",
+    "decade": "TEST",
+    "name": "Blueglass Energy",
+    "sector": "Test Company · Clean Energy",
+    "summary": "A fictional clean-energy startup seeking a loan to install a demonstration facility.",
+    "principalRequired": 250000,
+    "minimumFundingRatio": 0.8,
+    "maximumRate": 18
+  },
+  {
+    "id": "T2-01",
+    "era": "ERA_2",
+    "eraName": "Test Era Two",
+    "decade": "TEST",
+    "name": "Maple Cloud Services",
+    "sector": "Test Company · Cloud Software",
+    "summary": "A fictional software provider seeking funding to add capacity for new business customers.",
+    "principalRequired": 180000,
+    "minimumFundingRatio": 0.7,
+    "maximumRate": 15
+  },
+  {
+    "id": "T2-02",
+    "era": "ERA_2",
+    "eraName": "Test Era Two",
+    "decade": "TEST",
+    "name": "Harbor Health Labs",
+    "sector": "Test Company · Healthcare",
+    "summary": "A fictional health technology company seeking capital to expand a diagnostic pilot.",
+    "principalRequired": 220000,
+    "minimumFundingRatio": 0.75,
+    "maximumRate": 17
+  },
+  {
+    "id": "T2-03",
+    "era": "ERA_2",
+    "eraName": "Test Era Two",
+    "decade": "TEST",
+    "name": "Orchard Mobility",
+    "sector": "Test Company · Transportation",
+    "summary": "A fictional mobility company seeking debt financing to expand its electric delivery fleet.",
+    "principalRequired": 240000,
+    "minimumFundingRatio": 0.7,
+    "maximumRate": 19
+  }
+]
