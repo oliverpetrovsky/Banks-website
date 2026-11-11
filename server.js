@@ -173,6 +173,14 @@ function parseCookies(header = "") {
   }).filter(([key]) => key));
 }
 
+function getClientIp(request) {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  const address = typeof forwardedFor === "string"
+    ? forwardedFor.split(",")[0].trim()
+    : request.socket.remoteAddress || "unknown";
+  return address.startsWith("::ffff:") ? address.slice(7) : address;
+}
+
 function getSession(request) {
   const token = parseCookies(request.headers.cookie).synergy_session;
   const session = token && sessions.get(token);
@@ -181,6 +189,7 @@ function getSession(request) {
     sessions.delete(token);
     return null;
   }
+  if (session.role === "participant" && session.clientIp !== getClientIp(request)) return null;
   session.expiresAt = Date.now() + SESSION_TTL_MS;
   return session;
 }
@@ -317,7 +326,7 @@ function serveAsset(response, filename, contentType) {
 }
 
 function loginAttemptKey(request, identity) {
-  return `${request.socket.remoteAddress || "unknown"}:${identity}`;
+  return `${getClientIp(request)}:${identity}`;
 }
 
 function isRateLimited(request, identity) {
@@ -454,11 +463,24 @@ async function handle(request, response) {
       recordFailedLogin(request, identity);
       return sendError(response, 401, "That team name and access code do not match.");
     }
+    const clientIp = getClientIp(request);
+    for (const [token, activeSession] of sessions) {
+      if (activeSession.expiresAt <= Date.now()) {
+        sessions.delete(token);
+        continue;
+      }
+      if (activeSession.role === "participant"
+          && activeSession.teamKey === team.key
+          && activeSession.clientIp !== clientIp) {
+        return sendError(response, 409, "This team account is already signed in from another IP address. Sign out there or wait for that session to expire.");
+      }
+    }
     clearLoginFailures(request, identity);
     const token = crypto.randomBytes(32).toString("base64url");
     sessions.set(token, {
       role: "participant",
       teamKey: team.key,
+      clientIp,
       expiresAt: Date.now() + SESSION_TTL_MS
     });
     setSessionCookie(response, token);
