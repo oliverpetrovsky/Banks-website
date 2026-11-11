@@ -4,7 +4,9 @@ const teamState = {
   auction: null,
   companyId: null,
   poll: null,
-  editingOffer: false
+  editingOffer: false,
+  previewTimer: null,
+  previewRequestId: 0
 };
 
 const formatRupees = (amount) => `₹${Number(amount).toLocaleString("en-IN")}`;
@@ -79,9 +81,12 @@ function renderStandings(bids, myBid) {
     details.className = "rank-team";
     const name = document.createElement("strong");
     name.textContent = bid.team;
-    const offer = document.createElement("small");
-    offer.textContent = `${formatRupees(bid.principal)} · ${bid.ratePercent}% p.a.`;
-    details.append(name, offer);
+    details.append(name);
+    if (myBid && bid.team === myBid.team) {
+      const offer = document.createElement("small");
+      offer.textContent = `${formatRupees(myBid.principal)} · ${myBid.ratePercent}% p.a.`;
+      details.append(offer);
+    }
     const score = document.createElement("span");
     score.className = "rank-bvi";
     score.textContent = bid.bvi.toFixed(4);
@@ -109,39 +114,41 @@ function renderFinancials(company) {
   }));
 }
 
-function updatePreview() {
+async function updatePreview() {
   const form = document.querySelector("#bid-form");
   const company = teamState.auction?.company;
   if (!company) return;
   const score = bvi(Number(form.elements.principal.value), Number(form.elements.ratePercent.value), company);
   const scoreNode = document.querySelector("#bvi-value");
   const rankNode = document.querySelector("#rank-preview");
+  const requestId = ++teamState.previewRequestId;
   if (score === null) {
     scoreNode.textContent = "—";
     rankNode.textContent = "Use the minimum bid and allowed increments to preview your rank.";
     return;
   }
-  const roundedScore = Number(score.toFixed(4));
-  scoreNode.textContent = roundedScore.toFixed(4);
-  const ownBid = teamState.auction.myBid;
-  const competitors = teamState.auction.leaderboard
-    .filter((bid) => !ownBid || bid.team !== ownBid.team)
-    .map((bid) => ({
-      ...bid,
-      score: Math.round(bid.bvi * 10000),
-      time: new Date(bid.submittedAt).getTime()
-    }));
-  competitors.push({
-    team: teamState.team,
-    score: Math.round(roundedScore * 10000),
-    ratePercent: Number(form.elements.ratePercent.value),
-    time: Date.now()
-  });
-  competitors.sort((a, b) => b.score - a.score
-    || a.ratePercent - b.ratePercent
-    || a.time - b.time);
-  const rank = competitors.findIndex((bid) => bid.team === teamState.team) + 1;
-  rankNode.textContent = `Projected position: #${rank} of ${competitors.length}.`;
+  scoreNode.textContent = score.toFixed(4);
+  if (teamState.auction.status !== "open") {
+    const rank = teamState.auction.myBid?.rank;
+    rankNode.textContent = rank ? `Final position: #${rank}.` : "This auction is closed.";
+    return;
+  }
+  rankNode.textContent = "Calculating projected position…";
+  try {
+    const preview = await api("/api/bids/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        principal: Number(form.elements.principal.value),
+        ratePercent: Number(form.elements.ratePercent.value)
+      })
+    });
+    if (requestId !== teamState.previewRequestId) return;
+    scoreNode.textContent = preview.bvi.toFixed(4);
+    rankNode.textContent = `Projected position: #${preview.rank} of ${preview.competingBids + 1}.`;
+  } catch (error) {
+    if (requestId !== teamState.previewRequestId) return;
+    rankNode.textContent = error.message;
+  }
 }
 
 function renderAuction(data) {
@@ -303,7 +310,8 @@ async function initialize() {
   ["principal", "ratePercent"].forEach((name) => {
     bidForm.elements[name].addEventListener("input", () => {
       teamState.editingOffer = true;
-      updatePreview();
+      clearTimeout(teamState.previewTimer);
+      teamState.previewTimer = setTimeout(updatePreview, 150);
     });
   });
   try {

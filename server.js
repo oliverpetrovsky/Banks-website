@@ -255,6 +255,29 @@ function leaderboardFor(company, bids) {
   return sortedBidsFor(company, bids).map((bid, index) => publicBid(bid, company, index + 1));
 }
 
+function bidTermsError(principal, ratePercent, company) {
+  if (!Number.isSafeInteger(principal) || principal % 10000 !== 0) {
+    return "Enter a principal in increments of ₹10,000.";
+  }
+  if (principal < minPrincipal(company)) {
+    return `The minimum offer for this company is ${minPrincipal(company).toLocaleString("en-IN")} rupees.`;
+  }
+  if (principal > SINGLE_BID_LIMIT) {
+    return `The maximum offer for one company is ${SINGLE_BID_LIMIT.toLocaleString("en-IN")} rupees.`;
+  }
+  if (!Number.isFinite(ratePercent) || ratePercent < 0 || ratePercent > company.maximumRate || Math.round(ratePercent * 100) % 50 !== 0) {
+    return `Enter an interest rate in 0.5% increments, up to ${company.maximumRate}%.`;
+  }
+  return null;
+}
+
+function teamCommittedCapital(store, teamKey, excludedBidIndex = -1) {
+  return store.bids.reduce((sum, bid, index) => {
+    if (bid.teamKey !== teamKey || index === excludedBidIndex) return sum;
+    return sum + bid.principal;
+  }, 0);
+}
+
 function auctionKey(era, companyId) {
   return `${era}:${companyId}`;
 }
@@ -539,10 +562,13 @@ async function handle(request, response) {
         participantCount: store.teams.length
       });
     }
-    const bids = leaderboardFor(company, store.bids);
+    const allBids = leaderboardFor(company, store.bids);
     const ownBid = session.role === "participant"
       ? store.bids.find((bid) => bid.teamKey === session.teamKey && bid.companyId === company.id && bid.era === company.era)
       : null;
+    const bids = session.role === "participant"
+      ? allBids.map(({ rank, team, bvi: score }) => ({ rank, team, bvi: score }))
+      : allBids;
     return sendJson(response, 200, {
       status: store.auction.status,
       era: store.auction.era,
@@ -550,6 +576,50 @@ async function handle(request, response) {
       leaderboard: bids,
       myBid: ownBid ? publicBid(ownBid, company, bids.find((bid) => bid.team === ownBid.team)?.rank || null) : null,
       participantCount: store.teams.length
+    });
+  }
+  if (request.method === "POST" && pathname === "/api/bids/preview") {
+    const session = requireRole(request, response, "participant");
+    if (!session) return;
+    const body = await readJson(request);
+    const store = readStore();
+    if (store.auction.status !== "open" || !store.auction.companyId) {
+      return sendError(response, 409, "The auction is not open yet.");
+    }
+    const company = companies.find((item) =>
+      item.id === store.auction.companyId && item.era === store.auction.era
+    );
+    if (!company) return sendError(response, 409, "The active auction company is unavailable.");
+    const team = store.teams.find((item) => item.key === session.teamKey);
+    if (!team) return sendError(response, 401, "This team account is no longer available.");
+    const principal = Number(body.principal);
+    const ratePercent = Number(body.ratePercent);
+    const termsError = bidTermsError(principal, ratePercent, company);
+    if (termsError) return sendError(response, 400, termsError);
+    const existingIndex = store.bids.findIndex((bid) =>
+      bid.era === company.era && bid.companyId === company.id && bid.teamKey === session.teamKey
+    );
+    const committed = teamCommittedCapital(store, session.teamKey, existingIndex);
+    if (committed + principal > VAULT_CAPITAL) {
+      return sendError(response, 400, `This offer would exceed your total ${VAULT_CAPITAL.toLocaleString("en-IN")} rupee team vault across all eras.`);
+    }
+    const candidate = {
+      era: company.era,
+      companyId: company.id,
+      team: team.name,
+      teamKey: team.key,
+      principal,
+      ratePercent,
+      submittedAt: new Date().toISOString()
+    };
+    const ranking = sortedBidsFor(company, [
+      ...store.bids.filter((bid) => bid.teamKey !== session.teamKey),
+      candidate
+    ]);
+    return sendJson(response, 200, {
+      bvi: Number(bvi(candidate, company).toFixed(4)),
+      rank: ranking.findIndex((bid) => bid.teamKey === session.teamKey) + 1,
+      competingBids: ranking.length - 1
     });
   }
   if (request.method === "POST" && pathname === "/api/bids") {
@@ -566,27 +636,14 @@ async function handle(request, response) {
     if (!company) return sendError(response, 409, "The active auction company is unavailable.");
     const principal = Number(body.principal);
     const ratePercent = Number(body.ratePercent);
-    if (!Number.isSafeInteger(principal) || principal % 10000 !== 0) {
-      return sendError(response, 400, "Enter a principal in increments of ₹10,000.");
-    }
-    if (principal < minPrincipal(company)) {
-      return sendError(response, 400, `The minimum offer for this company is ${minPrincipal(company).toLocaleString("en-IN")} rupees.`);
-    }
-    if (principal > SINGLE_BID_LIMIT) {
-      return sendError(response, 400, `The maximum offer for one company is ${SINGLE_BID_LIMIT.toLocaleString("en-IN")} rupees.`);
-    }
-    if (!Number.isFinite(ratePercent) || ratePercent < 0 || ratePercent > company.maximumRate || Math.round(ratePercent * 100) % 50 !== 0) {
-      return sendError(response, 400, `Enter an interest rate in 0.5% increments, up to ${company.maximumRate}%.`);
-    }
+    const termsError = bidTermsError(principal, ratePercent, company);
+    if (termsError) return sendError(response, 400, termsError);
     const team = store.teams.find((item) => item.key === session.teamKey);
     if (!team) return sendError(response, 401, "This team account is no longer available.");
     const existingIndex = store.bids.findIndex((bid) =>
       bid.era === company.era && bid.companyId === company.id && bid.teamKey === session.teamKey
     );
-    const committed = store.bids.reduce((sum, bid, index) => {
-      if (bid.teamKey !== session.teamKey || index === existingIndex) return sum;
-      return sum + bid.principal;
-    }, 0);
+    const committed = teamCommittedCapital(store, session.teamKey, existingIndex);
     if (committed + principal > VAULT_CAPITAL) {
       return sendError(response, 400, `This offer would exceed your total ${VAULT_CAPITAL.toLocaleString("en-IN")} rupee team vault across all eras.`);
     }
