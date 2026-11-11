@@ -1,7 +1,8 @@
 const adminState = {
   data: null,
   poll: null,
-  editingSelection: false
+  editingSelection: false,
+  authenticated: false
 };
 
 const formatRupees = (amount) => `₹${Number(amount).toLocaleString("en-IN")}`;
@@ -31,13 +32,15 @@ function setFormMessage(form, message, error = false) {
 }
 
 function renderLogin() {
+  adminState.authenticated = false;
   document.querySelector("#admin-login-card").hidden = false;
   document.querySelector("#admin-dashboard").hidden = true;
+  document.querySelector("#bloodlines-admin-panel").hidden = true;
 }
 
 function renderDashboard() {
+  adminState.authenticated = true;
   document.querySelector("#admin-login-card").hidden = true;
-  document.querySelector("#admin-dashboard").hidden = false;
   const eraSelect = document.querySelector("#auction-control-form select[name=era]");
   eraSelect.replaceChildren(...adminState.data.eras.map((era) => {
     const option = document.createElement("option");
@@ -46,6 +49,19 @@ function renderDashboard() {
     return option;
   }));
   refreshCompanySelect();
+  applyRoundMode();
+}
+
+function applyRoundMode() {
+  const isRoundTwo = document.body.dataset.round === "2";
+  document.querySelector("#admin-dashboard").hidden = isRoundTwo || !adminState.authenticated;
+  document.querySelector("#bloodlines-admin-panel").hidden = !isRoundTwo || !adminState.authenticated;
+  const form = document.querySelector("#auction-control-form");
+  form.elements.era.disabled = isRoundTwo;
+  form.elements.companyId.disabled = isRoundTwo;
+  form.querySelector('button[type="submit"]').disabled = isRoundTwo;
+  document.querySelector("#close-auction").disabled = isRoundTwo;
+  if (isRoundTwo && adminState.authenticated) refreshBloodlines();
 }
 
 function refreshCompanySelect(selectedId = "") {
@@ -92,6 +108,7 @@ async function createTeam(event) {
 }
 
 async function setAuction(status) {
+  if (document.body.dataset.round === "2") return;
   const form = document.querySelector("#auction-control-form");
   const body = { status };
   if (status === "open") {
@@ -208,6 +225,10 @@ function renderStandings(auction, board) {
 
 async function refreshDashboard() {
   try {
+    if (document.body.dataset.round === "2") {
+      await refreshBloodlines();
+      return;
+    }
     const [auction, teamData] = await Promise.all([
       api("/api/auction"),
       api("/api/admin/teams")
@@ -220,6 +241,94 @@ async function refreshDashboard() {
       return;
     }
     showToast(error.message);
+  }
+}
+
+function renderBloodlinesAdmin(state, scoreboard) {
+  document.querySelector("#bloodlines-admin-status").textContent = state.started
+    ? `Year ${state.year} · Stage ${state.stage} · ${state.stageName.replaceAll("_", " ")}`
+    : "Waiting to start";
+  document.querySelector("#bloodlines-admin-year").textContent = state.started ? String(state.year) : "—";
+  document.querySelector("#bloodlines-admin-stage").textContent = state.started
+    ? `${state.stage} / 5 · ${state.stageName.replaceAll("_", " ").toUpperCase()}`
+    : "NOT STARTED";
+  const submitted = state.teams.filter((team) => team.submitted).length;
+  document.querySelector("#bloodlines-admin-submissions").textContent = `${submitted} / ${state.teams.length}`;
+  document.querySelector("#bloodlines-admin-message").textContent = state.published
+    ? "Final results are published to participants."
+    : state.yearComplete
+      ? "All four years are complete. Publish the final scoreboard when ready."
+      : state.started
+        ? `Year ${state.year}, stage ${state.stage}. Market ${state.marketRevealed ? "revealed" : "not yet revealed"}; event ${state.wheelEvent || (state.eventAssigned ? "assigned (hidden until Stage 5)" : "not assigned")}.`
+        : "Start the simulation once all teams are registered.";
+
+  const controls = {
+    start: !state.started,
+    advance_stage: state.started && state.stage < 5 && !state.yearComplete,
+    close_year: state.started && state.stage === 5 && !state.yearComplete,
+    publish: state.yearComplete && !state.published
+  };
+  document.querySelectorAll("[data-bloodlines-action]").forEach((button) => {
+    button.hidden = !controls[button.dataset.bloodlinesAction];
+    button.disabled = false;
+  });
+
+  const scoreByTeam = new Map((scoreboard?.teams || []).map((team) => [team.team, team.score]));
+  const teamList = document.querySelector("#bloodlines-admin-teams");
+  teamList.replaceChildren();
+  for (const team of state.teams) {
+    const row = document.createElement("div");
+    row.className = "bloodlines-admin-team";
+    const name = document.createElement("strong");
+    name.textContent = team.name;
+    const submission = document.createElement("span");
+    submission.textContent = team.submitted ? "ALLOCATION SAVED" : "AWAITING ALLOCATION";
+    const balance = document.createElement("span");
+    balance.textContent = `CASH ${formatRupees(team.cash)} · DEBT ${formatRupees(team.debt)}`;
+    row.append(name, submission, balance);
+    if (state.published) {
+      const score = document.createElement("b");
+      score.textContent = formatRupees(scoreByTeam.get(team.name));
+      row.append(score);
+    }
+    teamList.append(row);
+  }
+  const audit = document.querySelector("#bloodlines-audit-log");
+  audit.replaceChildren(...(state.auditLog || []).slice().reverse().map((entry) => {
+    const item = document.createElement("li");
+    item.textContent = `${entry.at} · ${entry.actor} · ${entry.action} · ${entry.target}`;
+    return item;
+  }));
+}
+
+async function refreshBloodlines() {
+  try {
+    const state = await api("/api/bloodlines/admin/state");
+    const scoreboard = state.published || state.yearComplete ? await api("/api/bloodlines/scoreboard") : null;
+    renderBloodlinesAdmin(state, scoreboard);
+  } catch (error) {
+    if (error.message.includes("Sign in")) {
+      clearInterval(adminState.poll);
+      renderLogin();
+      return;
+    }
+    showToast(error.message);
+  }
+}
+
+async function runBloodlinesAction(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await api("/api/bloodlines/admin/advance", {
+      method: "POST",
+      body: JSON.stringify({ action: button.dataset.bloodlinesAction })
+    });
+    await refreshBloodlines();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -256,6 +365,7 @@ async function logout() {
     await api("/api/admin/logout", { method: "POST", body: "{}" });
     clearInterval(adminState.poll);
     renderLogin();
+    document.querySelector("#admin-dashboard").hidden = true;
   } catch (error) {
     showToast(error.message);
   }
@@ -274,6 +384,14 @@ async function initialize() {
   document.querySelector("#close-auction").addEventListener("click", closeAuction);
   document.querySelector("#admin-refresh").addEventListener("click", refreshDashboard);
   document.querySelector("#admin-logout").addEventListener("click", logout);
+  document.querySelector("#bloodlines-admin-logout").addEventListener("click", logout);
+  document.querySelector("#bloodlines-admin-refresh").addEventListener("click", refreshBloodlines);
+  document.querySelectorAll("[data-bloodlines-action]").forEach((button) => button.addEventListener("click", runBloodlinesAction));
+  document.addEventListener("banks-round-change", () => {
+    applyRoundMode();
+    if (adminState.authenticated) refreshDashboard();
+  });
+  applyRoundMode();
   try {
     adminState.data = await api("/api/events");
     const session = await api("/api/auth/session");

@@ -2,6 +2,8 @@
 
 Banks & Bloodlines is a finance strategy event conducted by E-Cell at SYNERGY, the college fest. The website has three panels: a public landing page and completed-auction leaderboard at `/`, event controls at `/admin`, and participant bidding at `/team`.
 
+The round switcher selects Round 1, **The Banking Syndicate**, or Round 2, **Bloodlines**. Each round has its own team and admin views; the selected round is remembered in the browser.
+
 The app loads fictional companies from `data/test.json` by default. Event-specific company data is intentionally excluded from the public repository. When the approved event dataset is ready, keep it in a private local file and select it with `COMPANIES_FILE`.
 
 For initial team accounts, place a private file at `data/initial-teams.json` and set `INITIAL_TEAMS_FILE=data/initial-teams.json`. It is ignored by Git. The file must contain a JSON array with `name` and `accessCode` for each team. Access codes must be at least 12 characters:
@@ -58,6 +60,14 @@ Open `http://localhost:3000`. The public leaderboard only shows results after an
 - The website does not calculate company outcomes or team net-profit rankings; those require the event engine after the auction.
 
 Bid records and salted team access-code hashes are saved in `.data/bids.json` by default and survive a restart. Admin sessions and team login sessions expire on restart. The current auction selection and status are saved with the bid data.
+
+## Round 2: Bloodlines
+
+Bloodlines runs a four-year household investment simulation. Sign in at `/team` and select Round 2 to see household cash, investments, news, annual ledger, and the Stage 3 allocation form. The admin selects Round 2 at `/admin` to start the simulation, advance through its five stages, close each year, and publish final net-worth scores. The public page shows the scoreboard only after publication.
+
+The admin must advance stages deliberately. Every registered team must save an allocation before the Stage 3 trading window can close. The Wheel event is selected randomly with replacement once per year and is shared by all teams; it is not shown before Stage 5. Market prices are withheld until Stage 4. In the team panel, buy/sell lines are evaluated in submitted order, and the year-start reference prices are shown before the reveal.
+
+The repository's `data/bloodlines-test-market.json` is fictional test data only. For an event, create a private market JSON file and set `BLOODLINES_MARKET_FILE` to its path. It must contain four annual values for each instrument under `prices.equities` and `prices.funds`, plus four annual values in `prices.gold`. Never commit actual event prices. Bloodlines state is saved separately to `.data/bloodlines.json` by default; `BLOODLINES_STORE_FILE` can override that location. As with Round 1, Render's free filesystem is ephemeral and is unsuitable for a live event.
 
 ## Before the event
 

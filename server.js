@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const bloodlines = require("./bloodlines-engine");
 
 const ROOT = __dirname;
 const DATA_FILE = process.env.COMPANIES_FILE || path.join(ROOT, "data", "test.json");
@@ -419,6 +420,9 @@ async function handle(request, response) {
   if (request.method === "GET" && pathname === "/team.js") {
     return serveAsset(response, "team.js", "text/javascript; charset=utf-8");
   }
+  if (request.method === "GET" && pathname === "/round-switcher.js") {
+    return serveAsset(response, "round-switcher.js", "text/javascript; charset=utf-8");
+  }
   if (request.method === "GET" && pathname === "/SynLogo.png") {
     return serveAsset(response, "SynLogo.png", "image/png");
   }
@@ -503,6 +507,7 @@ async function handle(request, response) {
     sessions.set(token, {
       role: "participant",
       teamKey: team.key,
+      teamName: team.name,
       clientIp,
       expiresAt: Date.now() + SESSION_TTL_MS
     });
@@ -741,6 +746,11 @@ async function handle(request, response) {
         }))
       });
     }
+  }
+  if (pathname.startsWith("/api/bloodlines/")) {
+    const session = getSession(request);
+    const store = readStore();
+    return bloodlines.handle(request, response, pathname, session, store.teams);
   }
   return sendError(response, 404, "Page not found.");
 }

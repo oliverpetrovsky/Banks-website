@@ -3,7 +3,7 @@ services:
     name: banks-bloodlines-test
     runtime: node
     plan: free
-    buildCommand: node --check server.js && node --check public.js && node --check admin.js && node --check team.js
+    buildCommand: node --check server.js && node --check public.js && node --check admin.js && node --check team.js && node --check round-switcher.js && node --check bloodlines-engine.js
     startCommand: node server.js
     healthCheckPath: /healthz
     envVars:
@@ -13,3 +13,5 @@ services:
         value: "1"
       - key: INITIAL_TEAMS_FILE
         value: data/test-teams.json
+      - key: BLOODLINES_MARKET_FILE
+        value: data/bloodlines-test-market.json

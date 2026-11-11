@@ -7,6 +7,7 @@
     <meta name="description" content="Banks & Bloodlines: E-Cell's finance strategy event at SYNERGY college fest.">
     <title>Banks &amp; Bloodlines — SYNERGY</title>
     <link rel="stylesheet" href="/app.css">
+    <script src="/round-switcher.js" defer></script>
     <script src="/public.js" defer></script>
   </head>
   <body data-page="public">
@@ -21,7 +22,12 @@
           <a class="nav-link" href="/team">TEAM PANEL</a>
           <a class="nav-link" href="/admin">ADMIN</a>
         </nav>
+        <div class="round-switcher" role="group" aria-label="Select event round">
+          <button type="button" data-round-select="1" aria-pressed="true">R1 · BANKING</button>
+          <button type="button" data-round-select="2" aria-pressed="false">R2 · BLOODLINES</button>
+        </div>
       </header>
+      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> A four-year household investment simulation. Team allocations are available in the team panel; simulation controls are in the admin panel.</p>
 
       <main>
         <section class="public-hero">
@@ -36,17 +42,17 @@
             <div class="art-core"><span>₹</span></div>
             <span class="art-label label-one">CAPITAL</span><span class="art-label label-two">CONVICTION</span>
           </div>
-          <div class="hero-footnote"><span>FORTUNE FAVOURS THE CALCULATED.</span><span>ROUND 01 / THE BANKING SYNDICATE</span></div>
+          <div class="hero-footnote"><span>FORTUNE FAVOURS THE CALCULATED.</span><span data-round-label>ROUND 01 / THE BANKING SYNDICATE</span></div>
         </section>
 
-        <section class="public-summary">
+        <section class="public-summary" data-round-one>
           <div><strong>03</strong><span>HISTORICAL ERAS</span></div>
           <div><strong>₹6L</strong><span>TOTAL TEAM VAULT</span></div>
           <div><strong>BVI</strong><span>BID VALUE INDEX</span></div>
           <div class="public-status"><i class="status-pip"></i><span id="public-auction-status">CHECKING AUCTION</span></div>
         </section>
 
-        <section class="public-board-section">
+        <section class="public-board-section" data-round-one>
           <div class="public-board-heading">
             <div><p class="eyebrow"><span class="eyebrow-line"></span> RESULTS ARE POSTED AFTER EACH AUCTION</p><h2>Leaderboard</h2></div>
             <span class="live-indicator"><i></i> UPDATING LIVE</span>
@@ -55,6 +61,14 @@
           <div id="public-leaderboard" class="public-leaderboard" aria-live="polite">
             <p class="empty-state">Loading completed auctions…</p>
           </div>
+        </section>
+        <section class="public-board-section" data-round-two>
+          <div class="public-board-heading">
+            <div><p class="eyebrow"><span class="eyebrow-line"></span> FOUR-YEAR HOUSEHOLD RESULTS</p><h2>Bloodlines leaderboard</h2></div>
+            <span class="live-indicator"><i></i> UPDATING LIVE</span>
+          </div>
+          <p id="bloodlines-public-status" class="public-board-note">Final scores appear here after the admin publishes the completed simulation.</p>
+          <div id="bloodlines-public-leaderboard" class="public-leaderboard" aria-live="polite"></div>
         </section>
       </main>
 

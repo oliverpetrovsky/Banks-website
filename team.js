@@ -6,7 +6,8 @@ const teamState = {
   poll: null,
   editingOffer: false,
   previewTimer: null,
-  previewRequestId: 0
+  previewRequestId: 0,
+  bloodlinesState: null
 };
 
 const formatRupees = (amount) => `₹${Number(amount).toLocaleString("en-IN")}`;
@@ -166,6 +167,8 @@ function renderAuction(data) {
     document.querySelector("#team-auction-title").textContent = "Waiting for the auction";
     label.textContent = "WAITING";
     status.classList.remove("is-open", "is-closed");
+    waiting.querySelector("h3").textContent = "The next company will appear here.";
+    waiting.querySelector("p").textContent = "Stay signed in. Your bid panel opens when the admin starts an auction.";
     teamState.companyId = null;
     return;
   }
@@ -209,8 +212,224 @@ function renderAuction(data) {
   updatePreview();
 }
 
+function formatBloodlinesValue(value) {
+  return `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+}
+
+function captureBloodlinesDraft() {
+  const form = document.querySelector("#bloodlines-allocation-form");
+  if (!form || !teamState.bloodlinesState
+      || form.dataset.year !== String(teamState.bloodlinesState.year)
+      || !form.querySelector("[data-instrument-row]")) return null;
+  const trades = Object.fromEntries([...form.querySelectorAll("[data-instrument-row]")].map((row) => [
+    row.dataset.tradeLine,
+    {
+      instrument: row.querySelector("[data-trade-instrument]").value,
+      action: row.querySelector("[data-trade-action]").value,
+      quantity: row.querySelector("input").value
+    }
+  ]));
+  const insurance = [...form.querySelectorAll("[name=insurance]:checked")].map((input) => input.value);
+  return { trades: Object.values(trades), insurance };
+}
+
+function renderBloodlines(state, draftOverride = null) {
+  const previousState = teamState.bloodlinesState;
+  const allocationForm = document.querySelector("#bloodlines-allocation-form");
+  const preserveForm = !draftOverride
+    && previousState?.year === state.year
+    && previousState?.stage === state.stage
+    && allocationForm.querySelector("[data-instrument-row]");
+  teamState.bloodlinesState = state;
+  document.querySelector("#team-auction").hidden = true;
+  document.querySelector("#bloodlines-team-panel").hidden = false;
+  const title = document.querySelector("#bloodlines-title");
+  const stage = document.querySelector("#bloodlines-stage");
+  const notice = document.querySelector("#bloodlines-instructions");
+  const draft = captureBloodlinesDraft() || {
+    trades: (state.allocation?.trades || []).map((trade) => ({
+      instrument: trade.instrument,
+      action: trade.action,
+      quantity: String(trade.quantity)
+    })),
+    insurance: state.allocation?.insurance || []
+  };
+  if (draftOverride) {
+    draft.trades = draftOverride.trades;
+    draft.insurance = draftOverride.insurance;
+  }
+  if (draft.trades.length === 0) draft.trades = [{ instrument: "TECH", action: "hold", quantity: "" }];
+  title.textContent = state.started ? `Year ${state.year} · Household` : "Waiting for the simulation";
+  stage.textContent = state.started ? `STAGE ${state.stage} · ${state.stageName.replaceAll("_", " ").toUpperCase()}` : "WAITING";
+  notice.textContent = state.started
+    ? `Annual salary ${formatBloodlinesValue(state.current.salary)} · household expenses ${formatBloodlinesValue(state.current.expenses)} · ${state.status === "trading" ? "Trading is open; save your allocation before the admin advances." : "Your decisions are locked until the next trading window."}`
+    : "Your household ledger and investment decisions will appear when the admin starts Bloodlines.";
+
+  const summary = document.querySelector("#bloodlines-summary");
+  summary.replaceChildren();
+  [
+    ["CASH", formatBloodlinesValue(state.cash)],
+    ["DEBT", formatBloodlinesValue(state.debt)],
+    ["PORTFOLIO", String(Object.keys(state.holdings || {}).length + (state.deposits || []).filter((item) => !item.matured).length)],
+    ["CURRENT NET WORTH", state.score === null ? "HIDDEN" : formatBloodlinesValue(state.score)]
+  ].forEach(([label, value]) => {
+    const item = document.createElement("div");
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    const amount = document.createElement("strong");
+    amount.textContent = value;
+    item.append(caption, amount);
+    summary.append(item);
+  });
+
+  const news = document.querySelector("#bloodlines-news");
+  news.replaceChildren();
+  for (const item of state.news || []) {
+    const article = document.createElement("article");
+    const number = document.createElement("span");
+    number.textContent = `NEWS ${String(item.number).padStart(2, "0")}`;
+    const text = document.createElement("p");
+    text.textContent = item.text;
+    article.append(number, text);
+    news.append(article);
+  }
+  const wheel = document.querySelector("#bloodlines-wheel");
+  wheel.hidden = !state.wheelEvent;
+  wheel.textContent = state.wheelEvent
+    ? `YEARLY EVENT · ${state.wheelEvent.name} · ${state.wheelEvent.description}`
+    : "";
+
+  allocationForm.hidden = !state.started;
+  allocationForm.dataset.year = String(state.year);
+  const canTrade = state.status === "trading";
+  allocationForm.querySelectorAll("select, input, button").forEach((input) => { input.disabled = !canTrade; });
+  const trades = document.querySelector("#bloodlines-trades");
+  const instrumentById = new Map(state.instruments.map((instrument) => [instrument.id, instrument]));
+  if (!preserveForm) trades.replaceChildren(...draft.trades.map((tradeDraft, index) => {
+    const instrument = instrumentById.get(tradeDraft.instrument) || state.instruments[0];
+    const row = document.createElement("tr");
+    row.dataset.instrumentRow = "";
+    row.dataset.tradeLine = String(index);
+    const name = document.createElement("td");
+    const instrumentSelect = document.createElement("select");
+    instrumentSelect.dataset.tradeInstrument = "";
+    instrumentSelect.setAttribute("aria-label", `Trade ${index + 1} instrument`);
+    state.instruments.forEach((optionInstrument) => {
+      const option = document.createElement("option");
+      option.value = optionInstrument.id;
+      option.textContent = optionInstrument.name;
+      instrumentSelect.append(option);
+    });
+    instrumentSelect.value = instrument.id;
+    name.append(instrumentSelect);
+    const price = document.createElement("td");
+    const renderTradePrice = () => {
+      const selectedInstrument = instrumentById.get(instrumentSelect.value);
+      price.textContent = selectedInstrument.type === "fd"
+        ? `${selectedInstrument.rate * 100}% p.a.`
+        : formatBloodlinesValue(state.tradePrices[selectedInstrument.id]);
+    };
+    renderTradePrice();
+    const actionCell = document.createElement("td");
+    const action = document.createElement("select");
+    action.dataset.tradeAction = "";
+    action.setAttribute("aria-label", `${instrument.name} action`);
+    ["hold", "buy", "sell"].forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value.toUpperCase();
+      action.append(option);
+    });
+    action.value = tradeDraft.action || "hold";
+    actionCell.append(action);
+    const quantityCell = document.createElement("td");
+    const quantity = document.createElement("input");
+    quantity.type = "number";
+    quantity.min = "0";
+    const renderQuantityStep = () => {
+      const selectedInstrument = instrumentById.get(instrumentSelect.value);
+      quantity.step = selectedInstrument.type === "fund" ? "0.01" : selectedInstrument.type === "fd" ? "10000" : "1";
+      quantity.placeholder = selectedInstrument.type === "fd" ? "₹ amount" : "units";
+    };
+    renderQuantityStep();
+    instrumentSelect.addEventListener("change", () => {
+      renderTradePrice();
+      renderQuantityStep();
+    });
+    quantity.value = tradeDraft.quantity || "";
+    quantity.setAttribute("aria-label", `${instrument.name} units or amount`);
+    quantityCell.append(quantity);
+    row.append(name, price, actionCell, quantityCell);
+    return row;
+  }));
+  const insuranceOptions = document.querySelector("#bloodlines-insurance-options");
+  if (!preserveForm) insuranceOptions.replaceChildren(...state.insurance.map((policy) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "insurance";
+    input.value = policy.id;
+    input.checked = draft.insurance.includes(policy.id);
+    const caption = document.createElement("span");
+    caption.textContent = `${policy.name} · ${formatBloodlinesValue(policy.premium)}`;
+    label.append(input, caption);
+    return label;
+  }));
+  document.querySelector("#bloodlines-cash-preview").textContent = `AVAILABLE CASH · ${formatBloodlinesValue(state.cash)}`;
+
+  const holdings = document.querySelector("#bloodlines-holdings");
+  const holdingEntries = [
+    ...Object.entries(state.holdings || {}).map(([id, holding]) => `${id}: ${holding.quantity} units`),
+    ...(state.deposits || []).filter((item) => !item.matured).map((item) => `${item.term}-year FD: ${formatBloodlinesValue(item.principal)}`)
+  ];
+  holdings.textContent = holdingEntries.length ? holdingEntries.join(" · ") : "No investments held.";
+  const ledger = document.querySelector("#bloodlines-ledger");
+  ledger.replaceChildren(...(state.ledger || []).slice().reverse().map((entry) => {
+    const item = document.createElement("li");
+    item.textContent = `${entry.description} · ${formatBloodlinesValue(entry.amount)}`;
+    return item;
+  }));
+  const results = document.querySelector("#bloodlines-results");
+  results.hidden = state.score === null;
+  if (state.score !== null) {
+    document.querySelector("#bloodlines-scoreboard").textContent = `Final household net worth · ${formatBloodlinesValue(state.score)}`;
+  }
+}
+
+async function submitBloodlinesAllocation(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const trades = [...form.querySelectorAll("[data-instrument-row]")].flatMap((row) => {
+    const action = row.querySelector("[data-trade-action]").value;
+    const quantity = Number(row.querySelector("input").value);
+    return action === "hold" || !quantity ? [] : [{
+      instrument: row.querySelector("[data-trade-instrument]").value,
+      action,
+      quantity
+    }];
+  });
+  const insurance = [...form.querySelectorAll("[name=insurance]:checked")].map((input) => input.value);
+  try {
+    const result = await api("/api/bloodlines/allocation", {
+      method: "POST",
+      body: JSON.stringify({ trades, insurance })
+    });
+    formMessage(form, `Allocation saved · available cash ${formatBloodlinesValue(result.cash)}.`, false);
+    await refreshTeamPanel();
+  } catch (error) {
+    formMessage(form, error.message, true);
+  }
+}
+
 async function refreshTeamPanel() {
   try {
+    if (document.body.dataset.round === "2") {
+      const state = await api("/api/bloodlines/state");
+      renderBloodlines(state);
+      return;
+    }
+    document.querySelector("#bloodlines-team-panel").hidden = true;
+    document.querySelector("#team-auction").hidden = false;
     const [auction, results] = await Promise.all([
       api("/api/auction"),
       api("/api/team/results")
@@ -231,6 +450,7 @@ async function refreshTeamPanel() {
 
 async function submitBid(event) {
   event.preventDefault();
+  if (document.body.dataset.round === "2") return;
   const form = event.currentTarget;
   const button = form.querySelector(".bid-submit");
   const message = document.querySelector("#bid-message");
@@ -305,6 +525,14 @@ async function initialize() {
     }
   });
   document.querySelector("#participant-logout").addEventListener("click", signOut);
+  document.querySelector("#bloodlines-allocation-form").addEventListener("submit", submitBloodlinesAllocation);
+  document.querySelector("#bloodlines-add-trade").addEventListener("click", () => {
+    if (!teamState.bloodlinesState) return;
+    const currentDraft = captureBloodlinesDraft() || { trades: [], insurance: [] };
+    currentDraft.trades.push({ instrument: "TECH", action: "hold", quantity: "" });
+    renderBloodlines(teamState.bloodlinesState, currentDraft);
+  });
+  document.addEventListener("banks-round-change", refreshTeamPanel);
   const bidForm = document.querySelector("#bid-form");
   bidForm.addEventListener("submit", submitBid);
   ["principal", "ratePercent"].forEach((name) => {

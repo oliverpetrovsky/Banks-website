@@ -7,6 +7,7 @@
     <meta name="description" content="Banks & Bloodlines event administration.">
     <title>Admin — Banks &amp; Bloodlines</title>
     <link rel="stylesheet" href="/app.css">
+    <script src="/round-switcher.js" defer></script>
     <script src="/admin.js" defer></script>
   </head>
   <body data-page="admin">
@@ -16,12 +17,17 @@
         <nav class="site-nav" aria-label="Main navigation">
           <a class="nav-link" href="/">LEADERBOARD</a><a class="nav-link" href="/team">TEAM PANEL</a><a class="nav-link is-active" href="/admin">ADMIN</a>
         </nav>
+        <div class="round-switcher" role="group" aria-label="Select event round">
+          <button type="button" data-round-select="1" aria-pressed="true">R1 · BANKING</button>
+          <button type="button" data-round-select="2" aria-pressed="false">R2 · BLOODLINES</button>
+        </div>
       </header>
+      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Run the four-year household simulation from the controls below. Round 1 auction controls are unavailable while this round is selected.</p>
       <main class="panel-main">
         <section class="panel-heading">
           <p class="eyebrow"><span class="eyebrow-line"></span> E-CELL EVENT CONTROL</p>
           <h1>Admin <em>panel.</em></h1>
-          <p>Prepare team access and run one company auction at a time.</p>
+          <p data-round-one>Prepare team access and run one company auction at a time.</p>
         </section>
         <section id="admin-login-card" class="auth-card compact-auth">
           <form id="admin-login" class="auth-form">
@@ -64,6 +70,26 @@
             <p id="admin-board-caption" class="public-board-note">Start an auction to see the current standings.</p>
             <div id="admin-live-board" class="admin-live-board"></div>
           </section>
+        </section>
+        <section id="bloodlines-admin-panel" class="bloodlines-panel" hidden>
+          <div class="panel-toolbar">
+            <div><span class="panel-index">ROUND 02 / SIMULATION CONTROL</span><strong id="bloodlines-admin-status">Loading…</strong></div>
+            <div class="button-row"><button class="button button-ghost" id="bloodlines-admin-refresh" type="button">REFRESH</button><button class="button button-outline" id="bloodlines-admin-logout" type="button">SIGN OUT</button></div>
+          </div>
+          <div class="bloodlines-admin-overview">
+            <div><span class="panel-index">YEAR</span><strong id="bloodlines-admin-year">—</strong></div>
+            <div><span class="panel-index">STAGE</span><strong id="bloodlines-admin-stage">—</strong></div>
+            <div><span class="panel-index">TEAMS SUBMITTED</span><strong id="bloodlines-admin-submissions">—</strong></div>
+          </div>
+          <p id="bloodlines-admin-message" class="public-board-note">Start the simulation, then advance one stage at a time after the participants are ready.</p>
+          <div class="button-row bloodlines-admin-controls">
+            <button class="button button-primary" type="button" data-bloodlines-action="start">START SIMULATION</button>
+            <button class="button button-primary" type="button" data-bloodlines-action="advance_stage">ADVANCE STAGE</button>
+            <button class="button button-danger" type="button" data-bloodlines-action="close_year">CLOSE YEAR</button>
+            <button class="button button-primary" type="button" data-bloodlines-action="publish">PUBLISH FINAL SCORES</button>
+          </div>
+          <div class="admin-board-section"><div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> TEAM STATUS</p><h2>Simulation standings</h2></div></div><div id="bloodlines-admin-teams" class="bloodlines-admin-teams"></div></div>
+          <div class="admin-board-section"><div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> ADMIN AUDIT TRAIL</p><h2>Recent actions</h2></div></div><ol id="bloodlines-audit-log" class="bloodlines-ledger"></ol></div>
         </section>
       </main>
       <footer class="footer"><a class="wordmark footer-mark" href="/"><img class="wordmark-icon" src="/SynLogo.png" alt=""><span>BANKS &amp; BLOODLINES<span class="wordmark-sub">SYNERGY COLLEGE FEST</span></span></a><div class="footer-organizer"><span>CONDUCTED BY</span><img class="ecell-logo" src="/ecell-logo(withoutBG).png" alt="E-Cell"></div></footer>

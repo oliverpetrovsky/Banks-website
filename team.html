@@ -7,6 +7,7 @@
     <meta name="description" content="Banks & Bloodlines team auction panel.">
     <title>Team Panel — Banks &amp; Bloodlines</title>
     <link rel="stylesheet" href="/app.css">
+    <script src="/round-switcher.js" defer></script>
     <script src="/team.js" defer></script>
   </head>
   <body data-page="team">
@@ -16,12 +17,17 @@
         <nav class="site-nav" aria-label="Main navigation">
           <a class="nav-link" href="/">LEADERBOARD</a><a class="nav-link is-active" href="/team">TEAM PANEL</a><a class="nav-link" href="/admin">ADMIN</a>
         </nav>
+        <div class="round-switcher" role="group" aria-label="Select event round">
+          <button type="button" data-round-select="1" aria-pressed="true">R1 · BANKING</button>
+          <button type="button" data-round-select="2" aria-pressed="false">R2 · BLOODLINES</button>
+        </div>
       </header>
+      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Guide a household through four years of investment decisions. Round 1 bidding is unavailable while this round is selected.</p>
       <main class="panel-main team-main">
         <section class="panel-heading">
-          <p class="eyebrow"><span class="eyebrow-line"></span> ROUND 01 / THE BANKING SYNDICATE</p>
+          <p class="eyebrow"><span class="eyebrow-line"></span> <span data-round-label>ROUND 01 / THE BANKING SYNDICATE</span></p>
           <h1>Your <em>team panel.</em></h1>
-          <p>Sign in to follow the live auction, preview your BVI, and place bids.</p>
+          <p data-round-one>Sign in to follow the live auction, preview your BVI, and place bids.</p>
         </section>
         <section id="team-login-card" class="auth-card compact-auth">
           <div class="auth-copy"><span class="panel-index">TEAM ACCESS</span><h2>Sign in to your syndicate</h2><p>Use your registered team name and the access code provided by E-Cell.</p></div>
@@ -41,7 +47,25 @@
             <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> AWARDED DEALS</p><h2>Your winning bids</h2></div></div>
             <div id="team-results" class="team-results"></div>
           </section>
-          <section class="team-auction">
+          <section id="bloodlines-team-panel" class="bloodlines-panel" hidden>
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> ROUND 02 / HOUSEHOLD SIMULATION</p><h2 id="bloodlines-title">Waiting for the simulation</h2></div><span id="bloodlines-stage" class="auction-status-card">WAITING</span></div>
+            <p id="bloodlines-instructions" class="public-board-note">Your household ledger and investment decisions will appear when the admin starts Bloodlines.</p>
+            <div id="bloodlines-summary" class="bloodlines-summary"></div>
+            <div id="bloodlines-news" class="bloodlines-news"></div>
+            <div id="bloodlines-wheel" class="bloodlines-wheel" hidden></div>
+            <form id="bloodlines-allocation-form" class="bloodlines-allocation" hidden>
+              <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> STAGE 03 / TRADING WINDOW</p><h3>Build your allocation</h3></div></div>
+              <p class="public-board-note">Use the prices known at the start of this year. Trades are processed in the order shown; you may buy and sell an asset in one window.</p>
+              <button class="button button-ghost bloodlines-add-trade" id="bloodlines-add-trade" type="button">ADD TRADE LINE</button>
+              <div class="bloodlines-trades-wrap"><table class="bloodlines-trades"><thead><tr><th>INSTRUMENT</th><th>KNOWN PRICE</th><th>ACTION</th><th>UNITS / ₹</th></tr></thead><tbody id="bloodlines-trades"></tbody></table></div>
+              <fieldset class="bloodlines-insurance"><legend>INSURANCE FOR THIS YEAR</legend><div id="bloodlines-insurance-options"></div></fieldset>
+              <div class="button-row"><button class="button button-primary" type="submit">SAVE ALLOCATION</button><span id="bloodlines-cash-preview"></span></div>
+              <p class="form-message" aria-live="polite"></p>
+            </form>
+            <div class="bloodlines-lower-grid"><section><p class="eyebrow">PORTFOLIO</p><div id="bloodlines-holdings"></div></section><section><p class="eyebrow">HOUSEHOLD LEDGER</p><ol id="bloodlines-ledger" class="bloodlines-ledger"></ol></section></div>
+            <section id="bloodlines-results" hidden><p class="eyebrow">FINAL SCORE</p><div id="bloodlines-scoreboard"></div></section>
+          </section>
+          <section id="team-auction" class="team-auction">
             <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> LIVE DEAL ROOM</p><h2 id="team-auction-title">Waiting for the auction</h2></div><span id="team-auction-status" class="auction-status-card"><i class="status-pip"></i><span>WAITING</span></span></div>
             <div id="auction-waiting" class="waiting-panel"><span class="waiting-signal" aria-hidden="true"></span><div><h3>The next company will appear here.</h3><p>Stay signed in. Your bid panel opens when the admin starts an auction.</p></div></div>
             <div id="active-deal" class="active-deal" hidden>
