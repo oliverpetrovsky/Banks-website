@@ -7,7 +7,8 @@ const teamState = {
   editingOffer: false,
   previewTimer: null,
   previewRequestId: 0,
-  bloodlinesState: null
+  bloodlinesState: null,
+  loanCommentDrafts: new Map()
 };
 
 const formatRupees = (amount) => `₹${Number(amount).toLocaleString("en-IN")}`;
@@ -107,11 +108,165 @@ function renderBankingAccount(banking) {
       ? `6% bond growth · ${entry.decade}`
       : entry.type === "company-interest"
         ? `Company interest · ${entry.companyId}`
-        : `Principal return · ${entry.companyId}`;
+        : entry.type === "loan-funded"
+          ? `Loan funded · ${entry.loanId}`
+          : entry.type === "loan-issued"
+            ? `Loan issued · ${entry.loanId}`
+            : entry.type === "loan-payment"
+              ? `Loan payment · ${entry.loanId}`
+              : entry.type === "loan-repayment"
+                ? `Loan repayment received · ${entry.loanId}`
+                : `Principal return · ${entry.companyId}`;
     item.textContent = `${source} · ${amount}`;
     return item;
   }));
   section.hidden = document.body.dataset.round === "2";
+}
+
+function renderTeamLoans(data) {
+  const section = document.querySelector("#inter-team-loans");
+  const lenderSelect = document.querySelector("#loan-request-form select[name=lenderKey]");
+  const selectedLender = lenderSelect.value;
+  lenderSelect.replaceChildren(...data.counterparties.map((team) => {
+    const option = document.createElement("option");
+    option.value = team.key;
+    option.textContent = team.name;
+    return option;
+  }));
+  if (data.counterparties.some((team) => team.key === selectedLender)) lenderSelect.value = selectedLender;
+  lenderSelect.disabled = data.counterparties.length === 0;
+  document.querySelector("#loan-capacity").textContent =
+    `LENDING CAPACITY · ${formatRupees(data.lendingCapacity)} · ${data.activeLoanCount}/${data.rules.maximumActiveLoans} ACTIVE`;
+  document.querySelector("#loan-rules").textContent =
+    `Rates 7%–20% · terms 1–19 years · equal annual installments. Simple interest is based on original principal; compound interest uses an annual amortized balance. Maximum lending is 15% of current cash; maximum ${data.rules.maximumActiveLoans} active loans.`;
+
+  const list = document.querySelector("#team-loan-list");
+  list.querySelectorAll("[data-loan-comment]").forEach((input) => {
+    teamState.loanCommentDrafts.set(input.dataset.loanComment, input.value);
+  });
+  if (!data.loans.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No loan requests or active loans.";
+    list.replaceChildren(empty);
+  } else {
+    list.replaceChildren(...data.loans.map((loan) => {
+      const card = document.createElement("article");
+      card.className = "loan-card";
+      const heading = document.createElement("div");
+      heading.className = "loan-card-heading";
+      const title = document.createElement("strong");
+      title.textContent = `${loan.borrower} → ${loan.lender}`;
+      const status = document.createElement("span");
+      status.textContent = loan.status.replaceAll("_", " ").toUpperCase();
+      heading.append(title, status);
+      const terms = document.createElement("p");
+      terms.textContent = `${formatRupees(loan.principal)} · ${loan.ratePercent}% ${loan.interestType} · ${loan.termYears} years · ${loan.paidInstallments}/${loan.termYears} installments`;
+      const initialComment = document.createElement("p");
+      initialComment.textContent = `Request: ${loan.comments || "No comment provided."}`;
+      card.append(heading, terms, initialComment);
+      if (loan.lenderDecision) {
+        const note = document.createElement("p");
+        note.textContent = `Lender ${loan.lenderDecision.decision}: ${loan.lenderDecision.comments || "No comment."}`;
+        card.append(note);
+      }
+      if (loan.adminDecision) {
+        const note = document.createElement("p");
+        note.textContent = `Admin ${loan.adminDecision.decision}: ${loan.adminDecision.comments || "No comment."}`;
+        card.append(note);
+      }
+      if (loan.status === "active") {
+        const outstanding = document.createElement("p");
+        outstanding.textContent = `Outstanding principal ${formatRupees(loan.outstandingPrincipal)} · annual installment ${formatRupees(loan.annualPayment)} · payments occur automatically at decade settlements.`;
+        card.append(outstanding);
+      }
+      if (loan.status === "defaulted") {
+        const defaultNotice = document.createElement("p");
+        defaultNotice.textContent = `Defaulted unpaid balance ${formatRupees(loan.defaultAmount)}.`;
+        card.append(defaultNotice);
+      }
+      if (loan.payments?.length) {
+        const paymentHistory = document.createElement("p");
+        paymentHistory.textContent = `Payments: ${loan.payments.slice(-3).map((payment) =>
+          `#${payment.installment} ${formatRupees(payment.paid)} (${payment.decade})`
+        ).join(" · ")}`;
+        card.append(paymentHistory);
+      }
+      if (loan.status === "pending_lender" && loan.lender === teamState.team) {
+        const comment = document.createElement("textarea");
+        comment.maxLength = 500;
+        comment.placeholder = "Lender decision comment (required for rejection)";
+        comment.dataset.loanComment = loan.id;
+        comment.value = teamState.loanCommentDrafts.get(loan.id) || "";
+        const actions = document.createElement("div");
+        actions.className = "button-row";
+        for (const decision of ["accepted", "rejected"]) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = decision === "accepted" ? "button button-primary" : "button button-danger";
+          button.dataset.loanDecision = decision;
+          button.dataset.loanId = loan.id;
+          button.textContent = decision === "accepted" ? "ACCEPT FOR ADMIN REVIEW" : "REJECT REQUEST";
+          actions.append(button);
+        }
+        card.append(comment, actions);
+      }
+      return card;
+    }));
+  }
+  section.hidden = document.body.dataset.round === "2";
+}
+
+async function submitLoanRequest(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  formMessage(form, "Sending request…");
+  try {
+    await api("/api/loans/requests", {
+      method: "POST",
+      body: JSON.stringify({
+        lenderKey: form.elements.lenderKey.value,
+        principal: Number(form.elements.principal.value),
+        ratePercent: Number(form.elements.ratePercent.value),
+        termYears: Number(form.elements.termYears.value),
+        interestType: form.elements.interestType.value,
+        comments: form.elements.comments.value
+      })
+    });
+    form.reset();
+    form.elements.ratePercent.value = "7";
+    form.elements.termYears.value = "1";
+    formMessage(form, "Request sent to the lender.");
+    await refreshTeamPanel();
+  } catch (error) {
+    formMessage(form, error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function decideLoanAsLender(event) {
+  const button = event.target.closest("[data-loan-decision]");
+  if (!button) return;
+  const comments = document.querySelector(`[data-loan-comment="${button.dataset.loanId}"]`).value;
+  button.disabled = true;
+  try {
+    await api(`/api/loans/${button.dataset.loanId}/lender-decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision: button.dataset.loanDecision, comments })
+    });
+    teamState.loanCommentDrafts.delete(button.dataset.loanId);
+    await refreshTeamPanel();
+    toast(button.dataset.loanDecision === "accepted"
+      ? "Loan sent to admin for approval."
+      : "Loan request rejected.");
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderStandings(bids, myBid) {
@@ -535,13 +690,15 @@ async function refreshTeamPanel() {
     document.querySelector("#banking-account").hidden = false;
     document.querySelector("#bloodlines-team-panel").hidden = true;
     document.querySelector("#team-auction").hidden = false;
-    const [auction, results] = await Promise.all([
+    const [auction, results, loans] = await Promise.all([
       api("/api/auction"),
-      api("/api/team/results")
+      api("/api/team/results"),
+      api("/api/loans")
     ]);
     renderAuction(auction);
     showWonBids(results.results);
     renderBankingAccount(results.banking);
+    renderTeamLoans(loans);
   } catch (error) {
     if (error.message.startsWith("Sign in")) {
       clearInterval(teamState.poll);
@@ -631,6 +788,8 @@ async function initialize() {
     }
   });
   document.querySelector("#participant-logout").addEventListener("click", signOut);
+  document.querySelector("#loan-request-form").addEventListener("submit", submitLoanRequest);
+  document.querySelector("#team-loan-list").addEventListener("click", decideLoanAsLender);
   document.querySelector("#bloodlines-allocation-form").addEventListener("submit", submitBloodlinesAllocation);
   document.querySelector("#bloodlines-add-trade").addEventListener("click", () => {
     if (!teamState.bloodlinesState) return;

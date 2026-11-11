@@ -1,9 +1,11 @@
 const adminState = {
   data: null,
   banking: null,
+  loans: [],
   poll: null,
   editingSelection: false,
-  authenticated: false
+  authenticated: false,
+  loanCommentDrafts: new Map()
 };
 
 const formatRupees = (amount) => `₹${Number(amount).toLocaleString("en-IN")}`;
@@ -229,6 +231,83 @@ function renderBankingProgress(state, auctionStatus) {
   startButton.disabled = !state.ready || !currentPending || auctionStatus === "open";
 }
 
+function renderAdminLoans(loans) {
+  const list = document.querySelector("#admin-loan-list");
+  list.querySelectorAll("[data-admin-loan-comment]").forEach((input) => {
+    adminState.loanCommentDrafts.set(input.dataset.adminLoanComment, input.value);
+  });
+  if (!loans.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No inter-team loan requests yet.";
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...loans.map((loan) => {
+    const card = document.createElement("article");
+    card.className = "loan-card";
+    const heading = document.createElement("div");
+    heading.className = "loan-card-heading";
+    const title = document.createElement("strong");
+    title.textContent = `${loan.borrower} → ${loan.lender}`;
+    const status = document.createElement("span");
+    status.textContent = loan.status.replaceAll("_", " ").toUpperCase();
+    heading.append(title, status);
+    const terms = document.createElement("p");
+    terms.textContent = `${formatRupees(loan.principal)} · ${loan.ratePercent}% ${loan.interestType} · ${loan.termYears} years · ${loan.paidInstallments}/${loan.termYears} installments`;
+    const initialComments = document.createElement("p");
+    initialComments.textContent = `Request: ${loan.comments || "No comment provided."}`;
+    card.append(heading, terms, initialComments);
+    if (loan.lenderDecision) {
+      const lenderNote = document.createElement("p");
+      lenderNote.textContent = `Lender ${loan.lenderDecision.decision}: ${loan.lenderDecision.comments || "No comment."}`;
+      card.append(lenderNote);
+    }
+    if (loan.adminDecision) {
+      const adminNote = document.createElement("p");
+      adminNote.textContent = `Admin ${loan.adminDecision.decision}: ${loan.adminDecision.comments || "No comment."}`;
+      card.append(adminNote);
+    }
+    if (loan.status === "active") {
+      const outstanding = document.createElement("p");
+      outstanding.textContent = `Outstanding principal ${formatRupees(loan.outstandingPrincipal)} · annual installment ${formatRupees(loan.annualPayment)} · scheduled payments at decade checkpoints`;
+      card.append(outstanding);
+    }
+    if (loan.status === "defaulted") {
+      const defaultNotice = document.createElement("p");
+      defaultNotice.textContent = `Defaulted unpaid balance ${formatRupees(loan.defaultAmount)}.`;
+      card.append(defaultNotice);
+    }
+    if (loan.payments?.length) {
+      const paymentHistory = document.createElement("p");
+      paymentHistory.textContent = `Payments: ${loan.payments.slice(-3).map((payment) =>
+        `#${payment.installment} ${formatRupees(payment.paid)} (${payment.decade})`
+      ).join(" · ")}`;
+      card.append(paymentHistory);
+    }
+    if (loan.status === "pending_admin") {
+      const comment = document.createElement("textarea");
+      comment.maxLength = 500;
+      comment.placeholder = "Admin decision comment (required for rejection)";
+      comment.dataset.adminLoanComment = loan.id;
+      comment.value = adminState.loanCommentDrafts.get(loan.id) || "";
+      const actions = document.createElement("div");
+      actions.className = "button-row";
+      for (const decision of ["approved", "rejected"]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = decision === "approved" ? "button button-primary" : "button button-danger";
+        button.dataset.adminLoanDecision = decision;
+        button.dataset.loanId = loan.id;
+        button.textContent = decision === "approved" ? "APPROVE LOAN" : "REJECT LOAN";
+        actions.append(button);
+      }
+      card.append(comment, actions);
+    }
+    return card;
+  }));
+}
+
 function renderStandings(auction, board) {
   const status = document.querySelector("#admin-auction-status");
   const title = document.querySelector("#admin-board-title");
@@ -314,18 +393,21 @@ async function refreshDashboard() {
       await refreshBloodlines();
       return;
     }
-    const [banking, auction, teamData] = await Promise.all([
+    const [banking, auction, teamData, loanData] = await Promise.all([
       api("/api/admin/banking"),
       api("/api/auction"),
-      api("/api/admin/teams")
+      api("/api/admin/teams"),
+      api("/api/admin/loans")
     ]);
     adminState.banking = banking;
+    adminState.loans = loanData.loans;
     const eraSelect = document.querySelector("#auction-control-form").elements.era;
     if (banking.current && eraSelect.value !== banking.current.era) {
       eraSelect.value = banking.current.era;
     }
     refreshCompanySelect();
     renderBankingProgress(banking, auction.status);
+    renderAdminLoans(loanData.loans);
     renderStandings(auction, teamData);
   } catch (error) {
     if (error.message.includes("Sign in")) {
@@ -590,6 +672,26 @@ async function settleBankingDecade() {
   }
 }
 
+async function decideLoanAsAdmin(event) {
+  const button = event.target.closest("[data-admin-loan-decision]");
+  if (!button) return;
+  const comments = document.querySelector(`[data-admin-loan-comment="${button.dataset.loanId}"]`).value;
+  button.disabled = true;
+  try {
+    await api(`/api/admin/loans/${button.dataset.loanId}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ decision: button.dataset.adminLoanDecision, comments })
+    });
+    adminState.loanCommentDrafts.delete(button.dataset.loanId);
+    await refreshDashboard();
+    showToast(button.dataset.adminLoanDecision === "approved" ? "Loan approved and funded." : "Loan request rejected.");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function initialize() {
   document.querySelector("#admin-login").addEventListener("submit", login);
   const control = document.querySelector("#auction-control-form");
@@ -599,6 +701,8 @@ async function initialize() {
   document.querySelector("#close-auction").addEventListener("click", closeAuction);
   document.querySelector("#admin-refresh").addEventListener("click", refreshDashboard);
   document.querySelector("#banking-settle-decade").addEventListener("click", settleBankingDecade);
+  document.querySelector("#admin-loans-refresh").addEventListener("click", refreshDashboard);
+  document.querySelector("#admin-loan-list").addEventListener("click", decideLoanAsAdmin);
   document.querySelector("#admin-logout").addEventListener("click", logout);
   document.querySelector("#bloodlines-admin-logout").addEventListener("click", logout);
   document.querySelector("#bloodlines-admin-refresh").addEventListener("click", refreshBloodlines);

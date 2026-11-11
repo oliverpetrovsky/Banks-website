@@ -19,9 +19,15 @@ const MAX_LOGIN_ATTEMPTS = 10;
 const MAX_BODY_BYTES = 16 * 1024;
 const BANKING_BOND_RATE = 0.06;
 const BANKING_DECADE_YEARS = 10;
+const MAX_ACTIVE_LOANS = 2;
+const MAX_LENDING_RATIO = 0.15;
+const LOAN_REQUEST_WINDOW_MS = 60 * 1000;
+const MAX_RECEIVED_LOAN_REQUESTS = 5;
 const companies = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 const sessions = new Map();
 const loginAttempts = new Map();
+const loanRequestTimes = new Map();
+const receivedLoanRequestTimes = new Map();
 
 if (!ADMIN_PASSWORD || ADMIN_PASSWORD.length < 12) {
   console.error("Set ADMIN_PASSWORD to a value of at least 12 characters before starting the server.");
@@ -93,7 +99,8 @@ function readStore() {
         initialTeamsSeeded: initialTeams.length > 0,
         auction: { status: "waiting", era: null, companyId: null },
         activeRound: 1,
-        banking: null
+        banking: null,
+        loans: []
       };
       ensureBankingState(store);
       if (initialTeams.length) writeStore(store);
@@ -111,7 +118,8 @@ function readStore() {
       ? stored.auction
       : { status: "waiting", era: null, companyId: null },
     activeRound: stored.activeRound === 2 ? 2 : 1,
-    banking: stored.banking && typeof stored.banking === "object" ? stored.banking : null
+    banking: stored.banking && typeof stored.banking === "object" ? stored.banking : null,
+    loans: Array.isArray(stored.loans) ? stored.loans : []
   };
   if (initialTeams.length && !store.initialTeamsSeeded) {
     const existingKeys = new Set(store.teams.map((team) => team.key));
@@ -281,6 +289,301 @@ function positionFor(store, teamKey, era, companyId) {
   return store.banking.accounts[teamKey]?.portfolio.find(
     (position) => position.era === era && position.companyId === companyId
   );
+}
+
+function activeLoansFor(store, teamKey) {
+  return store.loans.filter((loan) => loan.status === "active"
+    && (loan.borrowerKey === teamKey || loan.lenderKey === teamKey));
+}
+
+function outstandingLendingFor(store, teamKey) {
+  return store.loans.reduce((sum, loan) => {
+    if (loan.status !== "active" || loan.lenderKey !== teamKey) return sum;
+    return sum + loan.outstandingPrincipal;
+  }, 0);
+}
+
+function recentRequestCount(limits, teamKey, now = Date.now()) {
+  const recent = (limits.get(teamKey) || []).filter((timestamp) => now - timestamp < LOAN_REQUEST_WINDOW_MS);
+  if (recent.length) limits.set(teamKey, recent);
+  else limits.delete(teamKey);
+  return recent.length;
+}
+
+function recordLoanRequest(limits, teamKey, now = Date.now()) {
+  const recent = (limits.get(teamKey) || []).filter((timestamp) => now - timestamp < LOAN_REQUEST_WINDOW_MS);
+  recent.push(now);
+  limits.set(teamKey, recent);
+}
+
+function loanHasCounterpartyConflict(store, borrowerKey, lenderKey) {
+  return store.loans.some((loan) => loan.status === "active"
+    && loan.borrowerKey === lenderKey && loan.lenderKey === borrowerKey);
+}
+
+function sanitizeLoan(loan, viewerKey) {
+  return {
+    id: loan.id,
+    borrower: loan.borrowerName,
+    lender: loan.lenderName,
+    principal: loan.principal,
+    ratePercent: loan.ratePercent,
+    interestType: loan.interestType,
+    termYears: loan.termYears,
+    comments: loan.comments,
+    lenderDecision: loan.lenderDecision,
+    adminDecision: loan.adminDecision,
+    status: loan.status,
+    createdAt: loan.createdAt,
+    approvedAt: loan.approvedAt || null,
+    paidInstallments: loan.paidInstallments || 0,
+    annualPayment: loan.status === "active" ? loan.annualPayment : null,
+    outstandingPrincipal: loan.status === "active" ? loan.outstandingPrincipal : 0,
+    defaultAmount: loan.defaultAmount || 0,
+    lastDecision: viewerKey === loan.borrowerKey
+      ? loan.lenderDecision || loan.adminDecision
+      : loan.adminDecision || loan.lenderDecision,
+    payments: viewerKey === "admin" || viewerKey === loan.borrowerKey || viewerKey === loan.lenderKey
+      ? (loan.payments || []).map((payment) => ({
+        installment: payment.installment,
+        due: payment.due,
+        paid: payment.paid,
+        interest: payment.interest,
+        principal: payment.principal,
+        unpaid: payment.unpaid,
+        era: payment.era,
+        decade: payment.decade,
+        paidAt: payment.paidAt
+      }))
+      : []
+  };
+}
+
+function processLoanCheckpoint(store, era, decade) {
+  const payments = [];
+  for (const loan of store.loans) {
+    if (loan.status !== "active") continue;
+    const borrower = store.banking.accounts[loan.borrowerKey];
+    const lender = store.banking.accounts[loan.lenderKey];
+    if (!borrower || !lender) {
+      throw new Error(`Loan ${loan.id} refers to an account that no longer exists.`);
+    }
+
+    const installmentsThisCheckpoint = Math.min(
+      BANKING_DECADE_YEARS,
+      loan.termYears - loan.paidInstallments
+    );
+    let remainingCashToPay = borrower.balance;
+    let totalPaid = 0;
+    let totalInterest = 0;
+    let totalPrincipal = 0;
+    let defaulted = false;
+
+    for (let index = 0; index < installmentsThisCheckpoint; index += 1) {
+      const installmentNumber = loan.paidInstallments + 1;
+      const interest = loan.interestType === "simple"
+        ? Math.round(loan.principal * loan.ratePercent / 100)
+        : Math.round(loan.outstandingPrincipal * loan.ratePercent / 100);
+      const scheduledPayment = loan.interestType === "simple"
+        ? Math.round(loan.principal / loan.termYears) + interest
+        : loan.annualPayment;
+      const principalDue = Math.min(loan.outstandingPrincipal, scheduledPayment - interest);
+      const due = interest + principalDue;
+      if (remainingCashToPay < due) {
+        const paid = Math.max(0, remainingCashToPay);
+        const interestPaid = Math.min(interest, paid);
+        const principalPaid = Math.min(principalDue, paid - interestPaid);
+        loan.outstandingPrincipal -= principalPaid;
+        loan.paidInstallments += 1;
+        totalPaid += paid;
+        totalInterest += interestPaid;
+        totalPrincipal += principalPaid;
+        remainingCashToPay = 0;
+        loan.defaultAmount = interest - interestPaid + loan.outstandingPrincipal;
+        loan.status = "defaulted";
+        defaulted = true;
+        loan.payments.push({
+          installment: installmentNumber,
+          due,
+          paid,
+          interest: interestPaid,
+          principal: principalPaid,
+          unpaid: loan.defaultAmount,
+          era,
+          decade,
+          paidAt: new Date().toISOString()
+        });
+        break;
+      }
+
+      remainingCashToPay -= due;
+      totalPaid += due;
+      totalInterest += interest;
+      totalPrincipal += principalDue;
+      loan.outstandingPrincipal -= principalDue;
+      loan.paidInstallments += 1;
+      loan.payments.push({
+        installment: installmentNumber,
+        due,
+        paid: due,
+        interest,
+        principal: principalDue,
+        unpaid: 0,
+        era,
+        decade,
+        paidAt: new Date().toISOString()
+      });
+    }
+
+    borrower.balance -= totalPaid;
+    lender.balance += totalPaid;
+    if (totalPaid) {
+      borrower.ledger.push({ type: "loan-payment", loanId: loan.id, amount: -totalPaid, at: new Date().toISOString() });
+      lender.ledger.push({ type: "loan-repayment", loanId: loan.id, amount: totalPaid, at: new Date().toISOString() });
+    }
+    if (loan.status === "active" && loan.paidInstallments >= loan.termYears) {
+      loan.status = "repaid";
+      loan.closedAt = new Date().toISOString();
+    }
+    if (defaulted) loan.closedAt = new Date().toISOString();
+    if (totalPaid || defaulted) {
+      payments.push({
+        loanId: loan.id,
+        borrowerName: loan.borrowerName,
+        lenderName: loan.lenderName,
+        installmentsPaid: loan.paidInstallments,
+        totalPaid,
+        interestPaid: totalInterest,
+        principalPaid: totalPrincipal,
+        defaultAmount: loan.defaultAmount || 0,
+        status: loan.status
+      });
+    }
+  }
+  return payments;
+}
+
+function createLoanRequest(store, borrowerKey, body) {
+  const borrower = store.teams.find((team) => team.key === borrowerKey);
+  const lenderKey = typeof body.lenderKey === "string" ? body.lenderKey : "";
+  const lender = store.teams.find((team) => team.key === lenderKey);
+  const principal = Number(body.principal);
+  const ratePercent = Number(body.ratePercent);
+  const termYears = Number(body.termYears);
+  const interestType = body.interestType;
+  const comments = typeof body.comments === "string" ? body.comments.trim() : "";
+  if (!borrower || !lender || borrower.key === lender.key) {
+    throw Object.assign(new Error("Choose another registered team as the lender."), { status: 400 });
+  }
+  if (!Number.isSafeInteger(principal) || principal <= 0) {
+    throw Object.assign(new Error("Enter a positive whole-number loan amount."), { status: 400 });
+  }
+  if (!Number.isFinite(ratePercent) || ratePercent < 7 || ratePercent > 20
+      || Math.round(ratePercent * 100) !== ratePercent * 100) {
+    throw Object.assign(new Error("Choose an annual interest rate from 7% to 20%, up to two decimal places."), { status: 400 });
+  }
+  if (!Number.isInteger(termYears) || termYears < 1 || termYears >= 20) {
+    throw Object.assign(new Error("Choose a loan term from 1 to 19 years."), { status: 400 });
+  }
+  if (interestType !== "simple" && interestType !== "compound") {
+    throw Object.assign(new Error("Choose simple or compound interest."), { status: 400 });
+  }
+  if (comments.length > 500) {
+    throw Object.assign(new Error("Loan comments must be 500 characters or fewer."), { status: 400 });
+  }
+  if (loanHasCounterpartyConflict(store, borrower.key, lender.key)) {
+    throw Object.assign(new Error("You cannot request a loan from a team that currently borrows from you."), { status: 409 });
+  }
+
+  const lenderAccount = store.banking.accounts[lender.key];
+  if (!lenderAccount || principal > lenderAccount.balance
+      || outstandingLendingFor(store, lender.key) + principal > lenderAccount.balance * MAX_LENDING_RATIO) {
+    throw Object.assign(new Error("The requested amount exceeds this team's current lending capacity."), { status: 409 });
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    borrowerKey: borrower.key,
+    borrowerName: borrower.name,
+    lenderKey: lender.key,
+    lenderName: lender.name,
+    principal,
+    ratePercent,
+    interestType,
+    termYears,
+    comments,
+    lenderDecision: null,
+    adminDecision: null,
+    status: "pending_lender",
+    createdAt: new Date().toISOString(),
+    approvedAt: null,
+    approvedEra: null,
+    approvedDecade: null,
+    paidInstallments: 0,
+    outstandingPrincipal: principal,
+    annualPayment: null,
+    defaultAmount: 0,
+    payments: []
+  };
+}
+
+function addLoanDecision(loan, actor, decision, comments) {
+  const normalized = typeof comments === "string" ? comments.trim() : "";
+  if (normalized.length > 500) {
+    throw Object.assign(new Error("Decision comments must be 500 characters or fewer."), { status: 400 });
+  }
+  if (decision === "rejected" && !normalized) {
+    throw Object.assign(new Error("Add a comment explaining why the loan was rejected."), { status: 400 });
+  }
+  const record = {
+    decision,
+    comments: normalized,
+    at: new Date().toISOString()
+  };
+  if (actor === "lender") loan.lenderDecision = record;
+  else loan.adminDecision = record;
+  return record;
+}
+
+function loanApprovalError(store, loan) {
+  const borrower = store.banking.accounts[loan.borrowerKey];
+  const lender = store.banking.accounts[loan.lenderKey];
+  if (!borrower || !lender) return "A loan participant account is unavailable.";
+  if (store.activeRound !== 1 || !currentBankingGroup(store)?.group) {
+    return "An accepted loan can be approved only during an active Round 1 decade.";
+  }
+  if (activeLoansFor(store, loan.borrowerKey).length >= MAX_ACTIVE_LOANS
+      || activeLoansFor(store, loan.lenderKey).length >= MAX_ACTIVE_LOANS) {
+    return "Approval would exceed the two-active-loan limit for one of the teams.";
+  }
+  if (loanHasCounterpartyConflict(store, loan.borrowerKey, loan.lenderKey)) {
+    return "These teams already have an active loan in the reverse direction.";
+  }
+  if (loan.principal > lender.balance
+      || outstandingLendingFor(store, loan.lenderKey) + loan.principal > lender.balance * MAX_LENDING_RATIO) {
+    return "The lender no longer has enough cash or lending capacity for this loan.";
+  }
+  return null;
+}
+
+function approveLoan(store, loan) {
+  const error = loanApprovalError(store, loan);
+  if (error) throw Object.assign(new Error(error), { status: 409 });
+  const current = currentBankingGroup(store);
+  const borrower = store.banking.accounts[loan.borrowerKey];
+  const lender = store.banking.accounts[loan.lenderKey];
+  const rate = loan.ratePercent / 100;
+  loan.annualPayment = loan.interestType === "compound"
+    ? Math.round(loan.principal * rate / (1 - (1 + rate) ** -loan.termYears))
+    : Math.round(loan.principal / loan.termYears + loan.principal * rate);
+  loan.approvedAt = new Date().toISOString();
+  loan.approvedEra = current.era;
+  loan.approvedDecade = current.group.decade;
+  loan.status = "active";
+  lender.balance -= loan.principal;
+  borrower.balance += loan.principal;
+  lender.ledger.push({ type: "loan-issued", loanId: loan.id, amount: -loan.principal, at: loan.approvedAt });
+  borrower.ledger.push({ type: "loan-funded", loanId: loan.id, amount: loan.principal, at: loan.approvedAt });
 }
 
 function sendJson(response, status, value, headers = {}) {
@@ -542,8 +845,8 @@ function privateBankingAccount(store, teamKey) {
       decadeIndex: current.decadeIndex + 1,
       decadeCount: current.decadeCount
     } : null,
-    ledger: account.ledger.slice(-50).reverse().map(({ type, era, decade, companyId, amount, npi }) => ({
-      type, era, decade, companyId, amount, npi
+    ledger: account.ledger.slice(-50).reverse().map(({ type, era, decade, companyId, loanId, amount, npi }) => ({
+      type, era, decade, companyId, loanId, amount, npi
     }))
   };
 }
@@ -649,6 +952,7 @@ function settleBankingDecade(store) {
     decadeIndex: current.decadeIndex + 1,
     settledAt: new Date().toISOString(),
     bondCredits,
+    loanPayments: processLoanCheckpoint(store, current.era, decade),
     outcomes,
     eraSettlement: null
   };
@@ -955,6 +1259,94 @@ async function handle(request, response) {
       banking: privateBankingAccount(store, session.teamKey)
     });
   }
+  if (pathname === "/api/loans" && request.method === "GET") {
+    const session = requireRole(request, response, "participant");
+    if (!session) return;
+    const store = readStore();
+    const account = store.banking.accounts[session.teamKey];
+    return sendJson(response, 200, {
+      loans: store.loans
+        .filter((loan) => loan.borrowerKey === session.teamKey || loan.lenderKey === session.teamKey)
+        .map((loan) => sanitizeLoan(loan, session.teamKey))
+        .reverse(),
+      counterparties: store.teams
+        .filter((team) => team.key !== session.teamKey)
+        .map((team) => ({ key: team.key, name: team.name })),
+      lendingCapacity: Math.max(
+        0,
+        Math.floor(account.balance * MAX_LENDING_RATIO) - outstandingLendingFor(store, session.teamKey)
+      ),
+      activeLoanCount: activeLoansFor(store, session.teamKey).length,
+      rules: {
+        minimumRatePercent: 7,
+        maximumRatePercent: 20,
+        minimumTermYears: 1,
+        maximumTermYears: 19,
+        maximumActiveLoans: MAX_ACTIVE_LOANS,
+        requestCooldownSeconds: 60,
+        maximumReceivedRequestsPerMinute: MAX_RECEIVED_LOAN_REQUESTS
+      }
+    });
+  }
+  if (pathname === "/api/loans/requests" && request.method === "POST") {
+    const session = requireRole(request, response, "participant");
+    if (!session) return;
+    const store = readStore();
+    if (store.activeRound !== 1 || bankingSetupErrors().length || !currentBankingGroup(store)?.group) {
+      return sendError(response, 409, "Inter-team loans are available only during an active, configured Round 1.");
+    }
+    const body = await readJson(request);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return sendError(response, 400, "Submit a valid loan request.");
+    }
+    const lenderKey = typeof body.lenderKey === "string" ? body.lenderKey : "";
+    const now = Date.now();
+    if (recentRequestCount(loanRequestTimes, session.teamKey, now) >= 1) {
+      return sendError(response, 429, "You can create one loan request per minute.");
+    }
+    if (recentRequestCount(receivedLoanRequestTimes, lenderKey, now) >= MAX_RECEIVED_LOAN_REQUESTS) {
+      return sendError(response, 429, "This team has already received five loan requests in the last minute.");
+    }
+    let loan;
+    try {
+      loan = createLoanRequest(store, session.teamKey, body);
+    } catch (error) {
+      return sendError(response, error.status || 400, error.message);
+    }
+    store.loans.push(loan);
+    recordLoanRequest(loanRequestTimes, session.teamKey, now);
+    recordLoanRequest(receivedLoanRequestTimes, lenderKey, now);
+    writeStore(store);
+    return sendJson(response, 201, { loan: sanitizeLoan(loan, session.teamKey) });
+  }
+  const lenderDecisionMatch = pathname.match(/^\/api\/loans\/([^/]+)\/lender-decision$/);
+  if (lenderDecisionMatch && request.method === "POST") {
+    const session = requireRole(request, response, "participant");
+    if (!session) return;
+    const body = await readJson(request);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return sendError(response, 400, "Submit a valid lender decision.");
+    }
+    const store = readStore();
+    const loan = store.loans.find((item) => item.id === lenderDecisionMatch[1]);
+    if (!loan || loan.lenderKey !== session.teamKey) {
+      return sendError(response, 404, "That incoming loan request was not found.");
+    }
+    if (loan.status !== "pending_lender") {
+      return sendError(response, 409, "This loan request is no longer awaiting your decision.");
+    }
+    if (body.decision !== "accepted" && body.decision !== "rejected") {
+      return sendError(response, 400, "Choose whether to accept or reject the request.");
+    }
+    try {
+      addLoanDecision(loan, "lender", body.decision, body.comments);
+    } catch (error) {
+      return sendError(response, error.status || 400, error.message);
+    }
+    loan.status = body.decision === "accepted" ? "pending_admin" : "rejected_by_lender";
+    writeStore(store);
+    return sendJson(response, 200, { loan: sanitizeLoan(loan, session.teamKey) });
+  }
   if (request.method === "GET" && pathname === "/api/auction") {
     const session = getSession(request);
     if (!session) return sendError(response, 401, "Sign in to view the live auction.");
@@ -1136,6 +1528,48 @@ async function handle(request, response) {
         })),
         lastSettlement: store.banking.settlementHistory.at(-1) || null
       });
+    }
+
+    if (request.method === "GET" && pathname === "/api/admin/loans") {
+      const store = readStore();
+      return sendJson(response, 200, {
+        loans: store.loans.map((loan) => sanitizeLoan(loan, "admin")).reverse(),
+        teams: store.teams.map((team) => ({
+          name: team.name,
+          activeLoanCount: activeLoansFor(store, team.key).length,
+          cash: store.banking.accounts[team.key]?.balance ?? VAULT_CAPITAL,
+          lendingCapacity: Math.max(
+            0,
+            Math.floor((store.banking.accounts[team.key]?.balance ?? VAULT_CAPITAL) * MAX_LENDING_RATIO)
+              - outstandingLendingFor(store, team.key)
+          )
+        }))
+      });
+    }
+
+    const adminLoanDecisionMatch = pathname.match(/^\/api\/admin\/loans\/([^/]+)\/decision$/);
+    if (adminLoanDecisionMatch && request.method === "POST") {
+      const body = await readJson(request);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return sendError(response, 400, "Submit a valid admin decision.");
+      }
+      const store = readStore();
+      const loan = store.loans.find((item) => item.id === adminLoanDecisionMatch[1]);
+      if (!loan || loan.status !== "pending_admin") {
+        return sendError(response, 404, "That lender-accepted loan request is not awaiting admin review.");
+      }
+      if (body.decision !== "approved" && body.decision !== "rejected") {
+        return sendError(response, 400, "Choose whether to approve or reject the loan.");
+      }
+      try {
+        addLoanDecision(loan, "admin", body.decision, body.comments);
+        if (body.decision === "approved") approveLoan(store, loan);
+        else loan.status = "rejected_by_admin";
+      } catch (error) {
+        return sendError(response, error.status || 400, error.message);
+      }
+      writeStore(store);
+      return sendJson(response, 200, { loan: sanitizeLoan(loan, "admin") });
     }
 
     if (request.method === "POST" && pathname === "/api/admin/banking/settle-decade") {

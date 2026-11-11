@@ -45,6 +45,21 @@
             <div id="banking-account-portfolio" class="banking-account-portfolio"></div>
             <ol id="banking-account-ledger" class="banking-account-ledger"></ol>
           </section>
+          <section id="inter-team-loans" class="banking-flow">
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> PRIVATE CREDIT</p><h2>Inter-team loans</h2></div><strong id="loan-capacity" class="banking-account-balance"></strong></div>
+            <p id="loan-rules" class="public-board-note">Request 1–19 years at 7%–20% annual interest. A loan is funded only after the lender and admin approve.</p>
+            <form id="loan-request-form" class="loan-request-form">
+              <label><span>REQUEST FROM</span><select name="lenderKey" required></select></label>
+              <label><span>AMOUNT (₹)</span><input name="principal" type="number" min="1" step="1" required></label>
+              <label><span>ANNUAL RATE (%)</span><input name="ratePercent" type="number" min="7" max="20" step="0.01" value="7" required></label>
+              <label><span>TERM (YEARS)</span><input name="termYears" type="number" min="1" max="19" step="1" value="1" required></label>
+              <label><span>INTEREST</span><select name="interestType"><option value="simple">Simple</option><option value="compound">Compound</option></select></label>
+              <label class="loan-comments-field"><span>REQUEST COMMENT</span><textarea name="comments" maxlength="500" placeholder="Explain why you need the loan"></textarea></label>
+              <button class="button button-primary" type="submit">SEND LOAN REQUEST</button>
+              <p class="form-message" aria-live="polite"></p>
+            </form>
+            <div id="team-loan-list" class="loan-list"></div>
+          </section>
           <section class="team-results-section" id="team-results-section" hidden>
             <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> AWARDED DEALS</p><h2>Your winning bids</h2></div></div>
             <div id="team-results" class="team-results"></div>

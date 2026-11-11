@@ -217,6 +217,18 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .banking-account-portfolio article { padding: 10px; display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 4px; }
 .banking-account-ledger { margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 15px; list-style: none; }
 .banking-account-ledger li { color: var(--muted); font: 7px/1.5 var(--mono); }
+.loan-request-form { margin: 12px 0 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); align-items: end; gap: 10px; }
+.loan-request-form label { display: grid; gap: 5px; }
+.loan-request-form label > span { color: var(--muted); font: 7px var(--mono); letter-spacing: .06em; }
+.loan-request-form input, .loan-request-form select, .loan-request-form textarea, .loan-card textarea { width: 100%; min-height: 36px; padding: 8px; border: 1px solid var(--line); border-radius: 4px; background: #10100f; color: var(--ink); }
+.loan-request-form textarea, .loan-card textarea { min-height: 60px; resize: vertical; }
+.loan-request-form .loan-comments-field { grid-column: 1 / -1; }
+.loan-list { display: grid; gap: 8px; }
+.loan-card { padding: 12px; display: grid; gap: 7px; border: 1px solid var(--line); border-radius: 4px; background: #141413; }
+.loan-card p { margin: 0; color: var(--smoke); font-size: 9px; line-height: 1.5; }
+.loan-card-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.loan-card-heading strong { font-size: 10px; }
+.loan-card-heading span { color: var(--yellow); font: 7px var(--mono); }
 
 @media (max-width: 760px) {
   .topbar { min-height: 65px; flex-wrap: wrap; gap: 10px 12px; }.wordmark { gap: 7px; font-size: 9px; }.wordmark-icon { width: 26px; height: 26px; }.wordmark-sub { font-size: 6px; }.site-nav { gap: 12px; }.nav-link { font-size: 7px; }.round-switcher, .round-indicator { margin-left: auto; }
