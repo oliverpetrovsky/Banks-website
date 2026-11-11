@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: banks-bloodlines-test
+    runtime: node
+    plan: free
+    buildCommand: node --check server.js && node --check public.js && node --check admin.js && node --check team.js
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "1"

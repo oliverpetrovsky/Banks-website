@@ -299,6 +299,9 @@ async function handle(request, response) {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
   const { pathname } = url;
 
+  if (request.method === "GET" && pathname === "/healthz") {
+    return sendJson(response, 200, { status: "ok" });
+  }
   if (request.method === "GET" && pathname === "/") {
     return serveAsset(response, "index.html", "text/html; charset=utf-8");
   }

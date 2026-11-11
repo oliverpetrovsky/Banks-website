@@ -4,6 +4,15 @@ Banks & Bloodlines is a finance strategy event conducted by E-Cell at SYNERGY, t
 
 The app loads fictional companies from `data/test.json` by default. Event-specific company data is intentionally excluded from the public repository. When the approved event dataset is ready, keep it in a private local file and select it with `COMPANIES_FILE`.
 
+## Deploy a test instance on Render
+
+1. Push this repository to GitHub. Confirm `data/companies.json` is not tracked; the Render Blueprint uses only the fictional `data/test.json`.
+2. In Render, choose **New → Blueprint**, connect `oliverpetrovsky/Banks-website`, and deploy the `render.yaml` Blueprint.
+3. Render generates a private `ADMIN_PASSWORD` and enables secure session cookies. Find the generated password in the service's environment settings, then use `/admin` to set up test teams.
+4. Open the deployed service URL. The public page is `/`, the team panel is `/team`, and administration is `/admin`.
+
+The Blueprint uses Render's free instance for testing. Its local JSON store is ephemeral: team accounts, bids, and auction state can be lost when Render restarts or redeploys the service. Admin and team sessions also expire on restarts. Do not use this deployment for a live event or real company data. Persistent storage requires a paid Render disk or replacing the JSON store with a managed database.
+
 ## Run locally
 
 Requires Node.js 18 or newer.
