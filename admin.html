@@ -30,7 +30,7 @@
         <section class="panel-heading">
           <p class="eyebrow"><span class="eyebrow-line"></span> E-CELL EVENT CONTROL</p>
           <h1>Admin <em>panel.</em></h1>
-          <p data-round-one>Prepare team access and run one company auction at a time.</p>
+          <p data-round-one>Prepare team access, run each decade's company auctions, and settle the team ledger.</p>
         </section>
         <section id="admin-login-card" class="auth-card compact-auth">
           <form id="admin-login" class="auth-form">
@@ -44,6 +44,14 @@
             <div><span class="panel-index">LIVE AUCTION STATUS</span><strong id="admin-auction-status">Loading…</strong></div>
             <div class="button-row"><button class="button button-ghost" id="admin-refresh" type="button">REFRESH</button><button class="button button-outline" id="admin-logout" type="button">SIGN OUT</button></div>
           </div>
+          <section class="banking-flow">
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> ROUND 01 / DECADE LEDGER</p><h2 id="banking-period">Preparing the first era</h2></div><strong id="banking-progress" class="live-indicator">—</strong></div>
+            <p id="banking-message" class="public-board-note">Review the private company-data setup before opening auctions.</p>
+            <div id="banking-errors" class="banking-errors" hidden></div>
+            <div id="banking-team-balances" class="banking-team-balances"></div>
+            <div class="button-row"><button class="button button-danger" id="banking-settle-decade" type="button">SETTLE DECADE</button></div>
+            <div id="banking-settlement-result" class="banking-settlement-result" hidden></div>
+          </section>
           <div class="admin-columns">
             <section class="admin-panel">
               <span class="panel-index">01 / TEAM ACCESS</span><h2>Issue team login</h2>
@@ -59,7 +67,7 @@
             </section>
             <section class="admin-panel">
               <span class="panel-index">02 / COMPANY CONTROL</span><h2>Run an auction</h2>
-              <p>Start the selected company or close the live auction to confirm its top BVI bid as the winner.</p>
+              <p>Only companies in the active decade can be opened. Close every auction in the decade before settling it.</p>
               <form id="auction-control-form" class="stack-form">
                 <label><span>ERA</span><select name="era"></select></label>
                 <label><span>COMPANY</span><select name="companyId"></select></label>

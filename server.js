@@ -17,6 +17,8 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 10;
 const MAX_BODY_BYTES = 16 * 1024;
+const BANKING_BOND_RATE = 0.06;
+const BANKING_DECADE_YEARS = 10;
 const companies = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 const sessions = new Map();
 const loginAttempts = new Map();
@@ -90,8 +92,10 @@ function readStore() {
         results: {},
         initialTeamsSeeded: initialTeams.length > 0,
         auction: { status: "waiting", era: null, companyId: null },
-        activeRound: 1
+        activeRound: 1,
+        banking: null
       };
+      ensureBankingState(store);
       if (initialTeams.length) writeStore(store);
       return store;
     }
@@ -106,7 +110,8 @@ function readStore() {
     auction: stored.auction && typeof stored.auction === "object"
       ? stored.auction
       : { status: "waiting", era: null, companyId: null },
-    activeRound: stored.activeRound === 2 ? 2 : 1
+    activeRound: stored.activeRound === 2 ? 2 : 1,
+    banking: stored.banking && typeof stored.banking === "object" ? stored.banking : null
   };
   if (initialTeams.length && !store.initialTeamsSeeded) {
     const existingKeys = new Set(store.teams.map((team) => team.key));
@@ -118,6 +123,7 @@ function readStore() {
     store.initialTeamsSeeded = true;
     writeStore(store);
   }
+  if (ensureBankingState(store)) writeStore(store);
   return store;
 }
 
@@ -127,6 +133,154 @@ function writeStore(store) {
   const temporaryFile = `${STORE_FILE}.${process.pid}.${crypto.randomUUID()}.tmp`;
   fs.writeFileSync(temporaryFile, JSON.stringify(store, null, 2), { mode: 0o600 });
   fs.renameSync(temporaryFile, STORE_FILE);
+}
+
+function companyEraOrder() {
+  return [...new Set(companies.map((company) => company.era))];
+}
+
+function parseDecadeStart(decade) {
+  const match = typeof decade === "string"
+    ? decade.trim().match(/^(\d{4})\s*[-–—]\s*(\d{4})$/)
+    : null;
+  if (!match || Number(match[2]) - Number(match[1]) !== 9) return null;
+  return Number(match[1]);
+}
+
+function decadesForEra(era) {
+  const groups = new Map();
+  for (const company of companies.filter((item) => item.era === era)) {
+    if (!groups.has(company.decade)) {
+      groups.set(company.decade, { decade: company.decade, start: parseDecadeStart(company.decade), companies: [] });
+    }
+    groups.get(company.decade).companies.push(company);
+  }
+  return [...groups.values()].sort((a, b) => {
+    if (a.start !== null && b.start !== null) return a.start - b.start;
+    return String(a.decade).localeCompare(String(b.decade));
+  });
+}
+
+function bankingSetupErrors() {
+  const errors = [];
+  const eras = companyEraOrder();
+  if (!eras.length) errors.push("The company dataset must contain at least one era.");
+  const companyKeys = new Set();
+  for (const company of companies) {
+    const key = `${company.era}:${company.id}`;
+    if (!company.era || !company.id || !company.name || companyKeys.has(key)) {
+      errors.push(`${company.id || "A company"} must have a unique ID, era, and name.`);
+    }
+    companyKeys.add(key);
+    if (!Number.isFinite(company.principalRequired) || company.principalRequired <= 0) {
+      errors.push(`${company.id}: principalRequired must be a positive number.`);
+    }
+    if (!Number.isFinite(company.minimumFundingRatio)
+        || company.minimumFundingRatio <= 0 || company.minimumFundingRatio > 1) {
+      errors.push(`${company.id}: minimumFundingRatio must be greater than 0 and no higher than 1.`);
+    }
+    if (!Number.isFinite(company.maximumRate) || company.maximumRate <= 0) {
+      errors.push(`${company.id}: maximumRate must be a positive number.`);
+    }
+    if (!Number.isFinite(company.strategicCoefficient)
+        || company.strategicCoefficient < 0 || company.strategicCoefficient > 100) {
+      errors.push(`${company.id}: strategicCoefficient must be between 0 and 100.`);
+    }
+    if (!Number.isFinite(company.growthMultiplier) || company.growthMultiplier <= 0) {
+      errors.push(`${company.id}: growthMultiplier must be a positive number.`);
+    }
+    if (parseDecadeStart(company.decade) === null) {
+      errors.push(`${company.id}: decade must be a 10-year range such as "1811-1820".`);
+    }
+  }
+  for (const era of eras) {
+    const groups = decadesForEra(era);
+    if (groups.length !== 10) {
+      errors.push(`${era}: expected exactly 10 distinct decade groups, found ${groups.length}.`);
+    }
+    const starts = groups.map((group) => group.start).filter((start) => start !== null);
+    if (new Set(starts).size !== starts.length) {
+      errors.push(`${era}: decade year ranges must be unique.`);
+    }
+    for (let index = 1; index < groups.length; index += 1) {
+      if (groups[index - 1].start !== null && groups[index].start !== null
+          && groups[index].start < groups[index - 1].start + BANKING_DECADE_YEARS) {
+        errors.push(`${era}: decade year ranges must not overlap.`);
+        break;
+      }
+    }
+  }
+  return errors;
+}
+
+function newBankingAccount() {
+  return { balance: VAULT_CAPITAL, portfolio: [], ledger: [] };
+}
+
+function ensureBankingState(store) {
+  let changed = false;
+  if (!store.banking || store.banking.schemaVersion !== 1) {
+    const banking = {
+      schemaVersion: 1,
+      activeEraIndex: 0,
+      decadeIndex: 0,
+      complete: false,
+      accounts: {},
+      settlementHistory: [],
+      positionHistory: []
+    };
+    for (const result of Object.values(store.results || {})) {
+      if (!result?.winnerTeamKey) continue;
+      const company = companies.find((item) => item.era === result.era && item.id === result.companyId);
+      if (!company) continue;
+      const winningBid = sortedBidsFor(company, store.bids)
+        .find((bid) => bid.teamKey === result.winnerTeamKey);
+      if (!winningBid) continue;
+      const account = banking.accounts[winningBid.teamKey] ||= newBankingAccount();
+      account.balance -= winningBid.principal;
+      account.portfolio.push({
+        era: company.era,
+        decade: company.decade,
+        companyId: company.id,
+        teamKey: winningBid.teamKey,
+        principal: winningBid.principal,
+        ratePercent: winningBid.ratePercent,
+        growthMultiplier: company.growthMultiplier,
+        npi: null,
+        interestPaid: 0,
+        status: "active"
+      });
+    }
+    store.banking = banking;
+    changed = true;
+  }
+  for (const team of store.teams) {
+    if (!store.banking.accounts[team.key]) {
+      store.banking.accounts[team.key] = newBankingAccount();
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function currentBankingGroup(store) {
+  const eras = companyEraOrder();
+  if (store.banking.complete || store.banking.activeEraIndex >= eras.length) return null;
+  const era = eras[store.banking.activeEraIndex];
+  const groups = decadesForEra(era);
+  return {
+    era,
+    eraName: companies.find((company) => company.era === era)?.eraName || era,
+    decadeIndex: store.banking.decadeIndex,
+    decadeCount: groups.length,
+    group: groups[store.banking.decadeIndex] || null
+  };
+}
+
+function positionFor(store, teamKey, era, companyId) {
+  return store.banking.accounts[teamKey]?.portfolio.find(
+    (position) => position.era === era && position.companyId === companyId
+  );
 }
 
 function sendJson(response, status, value, headers = {}) {
@@ -274,13 +428,6 @@ function bidTermsError(principal, ratePercent, company) {
   return null;
 }
 
-function teamCommittedCapital(store, teamKey, excludedBidIndex = -1) {
-  return store.bids.reduce((sum, bid, index) => {
-    if (bid.teamKey !== teamKey || index === excludedBidIndex) return sum;
-    return sum + bid.principal;
-  }, 0);
-}
-
 function auctionKey(era, companyId) {
   return `${era}:${companyId}`;
 }
@@ -290,12 +437,41 @@ function finalizeAuction(store) {
   if (!era || !companyId) return;
   const company = companies.find((item) => item.era === era && item.id === companyId);
   if (!company) return;
+  const key = auctionKey(era, companyId);
+  if (store.results[key]) return;
   const winningBid = sortedBidsFor(company, store.bids)[0];
-  if (!winningBid) return;
-  store.results[auctionKey(era, companyId)] = {
+  if (!winningBid) {
+    store.results[key] = {
+      era,
+      companyId,
+      winnerTeamKey: null,
+      status: "no-bids",
+      closedAt: new Date().toISOString()
+    };
+    return;
+  }
+  const account = store.banking.accounts[winningBid.teamKey];
+  if (!account || winningBid.principal > account.balance) {
+    throw new Error(`The winning bid for ${company.name} exceeds the team's available balance.`);
+  }
+  account.balance -= winningBid.principal;
+  account.portfolio.push({
+    era: company.era,
+    decade: company.decade,
+    companyId: company.id,
+    teamKey: winningBid.teamKey,
+    principal: winningBid.principal,
+    ratePercent: winningBid.ratePercent,
+    growthMultiplier: company.growthMultiplier,
+    npi: null,
+    interestPaid: 0,
+    status: "active"
+  });
+  store.results[key] = {
     era,
     companyId,
     winnerTeamKey: winningBid.teamKey,
+    status: "awarded",
     closedAt: new Date().toISOString()
   };
 }
@@ -303,7 +479,7 @@ function finalizeAuction(store) {
 function publicResults(store) {
   return companies.map((company) => {
     const result = store.results[auctionKey(company.era, company.id)];
-    if (!result) return null;
+    if (!result || !result.winnerTeamKey) return null;
     const winner = sortedBidsFor(company, store.bids)[0];
     if (!winner) return null;
     return {
@@ -332,6 +508,208 @@ function privateTeamResults(store, teamKey) {
       awardedAt: result.closedAt
     }];
   });
+}
+
+function privateBankingAccount(store, teamKey) {
+  const account = store.banking.accounts[teamKey];
+  if (!account) return null;
+  const describePosition = (position) => {
+    const company = companies.find((item) => item.id === position.companyId && item.era === position.era);
+    return {
+      companyId: position.companyId,
+      companyName: company?.name || position.companyId,
+      era: position.era,
+      decade: position.decade,
+      principal: position.principal,
+      ratePercent: position.ratePercent,
+      npi: position.npi,
+      interestPaid: position.interestPaid,
+      principalReturned: position.principalReturned ?? null,
+      status: position.status
+    };
+  };
+  const current = currentBankingGroup(store);
+  return {
+    balance: account.balance,
+    portfolio: account.portfolio.map(describePosition),
+    history: store.banking.positionHistory
+      .filter((position) => position.teamKey === teamKey)
+      .map(describePosition),
+    current: current ? {
+      era: current.era,
+      eraName: current.eraName,
+      decade: current.group?.decade || null,
+      decadeIndex: current.decadeIndex + 1,
+      decadeCount: current.decadeCount
+    } : null,
+    ledger: account.ledger.slice(-50).reverse().map(({ type, era, decade, companyId, amount, npi }) => ({
+      type, era, decade, companyId, amount, npi
+    }))
+  };
+}
+
+function settleBankingDecade(store) {
+  const setupErrors = bankingSetupErrors();
+  if (setupErrors.length) {
+    throw Object.assign(new Error(setupErrors.join(" ")), { status: 409 });
+  }
+  if (store.auction.status === "open") {
+    throw Object.assign(new Error("Close the current company auction before settling this decade."), { status: 409 });
+  }
+  const current = currentBankingGroup(store);
+  if (!current?.group) {
+    throw Object.assign(new Error("There is no active decade to settle."), { status: 409 });
+  }
+  const missing = current.group.companies.filter(
+    (company) => !store.results[auctionKey(company.era, company.id)]
+  );
+  if (missing.length) {
+    throw Object.assign(new Error(`Close every company auction in this decade before settling: ${missing.map((company) => company.id).join(", ")}.`), { status: 409 });
+  }
+
+  const decade = current.group.decade;
+  const bondFactor = (1 + BANKING_BOND_RATE) ** BANKING_DECADE_YEARS;
+  const bondCredits = [];
+  for (const team of store.teams) {
+    const account = store.banking.accounts[team.key];
+    const priorBalance = account.balance;
+    account.balance = Math.round(account.balance * bondFactor);
+    const amount = account.balance - priorBalance;
+    account.ledger.push({
+      type: "bond",
+      era: current.era,
+      decade,
+      amount,
+      at: new Date().toISOString()
+    });
+    bondCredits.push({ teamKey: team.key, amount });
+  }
+
+  const outcomes = [];
+  for (const company of current.group.companies) {
+    const result = store.results[auctionKey(company.era, company.id)];
+    if (!result.winnerTeamKey) {
+      result.npi = 0;
+      result.interestPaid = 0;
+      outcomes.push({
+        companyId: company.id,
+        companyName: company.name,
+        winnerTeamKey: null,
+        npi: 0,
+        interestPaid: 0
+      });
+      continue;
+    }
+    const winningBid = sortedBidsFor(company, store.bids)
+      .find((bid) => bid.teamKey === result.winnerTeamKey);
+    const position = positionFor(store, result.winnerTeamKey, company.era, company.id);
+    if (!winningBid || !position) {
+      throw new Error(`The awarded position for ${company.id} is missing.`);
+    }
+    const fundingModifier = Math.min(100, winningBid.principal / company.principalRequired * 100);
+    const interestDrag = winningBid.ratePercent;
+    const npi = Number(Math.max(
+      0,
+      Math.min(100, company.strategicCoefficient * (fundingModifier - interestDrag) / 100)
+    ).toFixed(2));
+    const interestPaid = npi >= 50
+      ? Math.round(winningBid.principal * winningBid.ratePercent / 100 * BANKING_DECADE_YEARS)
+      : 0;
+    result.npi = npi;
+    result.interestPaid = interestPaid;
+    position.npi = result.npi;
+    position.interestPaid = interestPaid;
+    position.status = "decade-settled";
+    if (interestPaid) {
+      const account = store.banking.accounts[result.winnerTeamKey];
+      account.balance += interestPaid;
+      account.ledger.push({
+        type: "company-interest",
+        era: current.era,
+        decade,
+        companyId: company.id,
+        amount: interestPaid,
+        npi: result.npi,
+        at: new Date().toISOString()
+      });
+    }
+    outcomes.push({
+      companyId: company.id,
+      companyName: company.name,
+      winnerTeamKey: result.winnerTeamKey,
+      npi: result.npi,
+      interestPaid
+    });
+  }
+
+  const settlement = {
+    era: current.era,
+    eraName: current.eraName,
+    decade,
+    decadeIndex: current.decadeIndex + 1,
+    settledAt: new Date().toISOString(),
+    bondCredits,
+    outcomes,
+    eraSettlement: null
+  };
+  store.banking.settlementHistory.push(settlement);
+  store.banking.decadeIndex += 1;
+
+  if (store.banking.decadeIndex === 10) {
+    const principalReturns = [];
+    for (const team of store.teams) {
+      const account = store.banking.accounts[team.key];
+      const remaining = [];
+      for (const position of account.portfolio) {
+        if (position.era !== current.era) {
+          remaining.push(position);
+          continue;
+        }
+        const principalFactor = position.npi < 50
+          ? 0.4
+          : position.npi >= 75 ? position.growthMultiplier : 1;
+        const principalReturned = Math.round(position.principal * principalFactor);
+        account.balance += principalReturned;
+        position.principalReturned = principalReturned;
+        position.status = "era-settled";
+        position.settledAt = new Date().toISOString();
+        account.ledger.push({
+          type: "principal-return",
+          era: current.era,
+          decade: position.decade,
+          companyId: position.companyId,
+          amount: principalReturned,
+          npi: position.npi,
+          at: position.settledAt
+        });
+        store.banking.positionHistory.push({ ...position });
+        const result = store.results[auctionKey(position.era, position.companyId)];
+        if (result) result.principalReturned = principalReturned;
+        principalReturns.push({
+          teamKey: team.key,
+          teamName: team.name,
+          companyId: position.companyId,
+          companyName: companies.find((company) =>
+            company.era === position.era && company.id === position.companyId
+          )?.name || position.companyId,
+          npi: position.npi,
+          principalReturned
+        });
+      }
+      account.portfolio = remaining;
+    }
+    settlement.eraSettlement = {
+      settledAt: new Date().toISOString(),
+      principalReturns
+    };
+    store.banking.activeEraIndex += 1;
+    store.banking.decadeIndex = 0;
+    if (store.banking.activeEraIndex >= companyEraOrder().length) {
+      store.banking.complete = true;
+    }
+  }
+  store.auction = { status: "waiting", era: null, companyId: null };
+  return settlement;
 }
 
 function serveAsset(response, filename, contentType) {
@@ -437,12 +815,18 @@ async function handle(request, response) {
       name: companies.find((company) => company.era === era).eraName
     }));
     return sendJson(response, 200, {
-      companies: companies.map(publicCompany),
       eras,
       rules: {
         vaultCapital: VAULT_CAPITAL,
         singleBidLimit: SINGLE_BID_LIMIT,
-        minimumDistinctBids: MIN_DISTINCT_BIDS
+        minimumDistinctBids: MIN_DISTINCT_BIDS,
+        bondAnnualRate: BANKING_BOND_RATE,
+        decadeYears: BANKING_DECADE_YEARS
+      },
+      banking: {
+        interestThreshold: 50,
+        growthThreshold: 75,
+        lowNpiPrincipalReturn: 0.4
       }
     });
   }
@@ -566,7 +950,10 @@ async function handle(request, response) {
     const session = requireRole(request, response, "participant");
     if (!session) return;
     const store = readStore();
-    return sendJson(response, 200, { results: privateTeamResults(store, session.teamKey) });
+    return sendJson(response, 200, {
+      results: privateTeamResults(store, session.teamKey),
+      banking: privateBankingAccount(store, session.teamKey)
+    });
   }
   if (request.method === "GET" && pathname === "/api/auction") {
     const session = getSession(request);
@@ -582,7 +969,10 @@ async function handle(request, response) {
         company: null,
         leaderboard: [],
         myBid: null,
-        participantCount: store.teams.length
+        participantCount: store.teams.length,
+        banking: session.role === "participant"
+          ? privateBankingAccount(store, session.teamKey)?.current || null
+          : undefined
       });
     }
     const allBids = leaderboardFor(company, store.bids);
@@ -598,7 +988,10 @@ async function handle(request, response) {
       company: publicCompany(company),
       leaderboard: bids,
       myBid: ownBid ? publicBid(ownBid, company, bids.find((bid) => bid.team === ownBid.team)?.rank || null) : null,
-      participantCount: store.teams.length
+      participantCount: store.teams.length,
+      banking: session.role === "participant"
+        ? privateBankingAccount(store, session.teamKey)?.current || null
+        : undefined
     });
   }
   if (request.method === "POST" && pathname === "/api/bids/preview") {
@@ -619,12 +1012,9 @@ async function handle(request, response) {
     const ratePercent = Number(body.ratePercent);
     const termsError = bidTermsError(principal, ratePercent, company);
     if (termsError) return sendError(response, 400, termsError);
-    const existingIndex = store.bids.findIndex((bid) =>
-      bid.era === company.era && bid.companyId === company.id && bid.teamKey === session.teamKey
-    );
-    const committed = teamCommittedCapital(store, session.teamKey, existingIndex);
-    if (committed + principal > VAULT_CAPITAL) {
-      return sendError(response, 400, `This offer would exceed your total ${VAULT_CAPITAL.toLocaleString("en-IN")} rupee team vault across all eras.`);
+    const account = store.banking.accounts[session.teamKey];
+    if (!account || principal > account.balance) {
+      return sendError(response, 400, "This offer exceeds your available cash balance.");
     }
     const candidate = {
       era: company.era,
@@ -642,7 +1032,8 @@ async function handle(request, response) {
     return sendJson(response, 200, {
       bvi: Number(bvi(candidate, company).toFixed(4)),
       rank: ranking.findIndex((bid) => bid.teamKey === session.teamKey) + 1,
-      competingBids: ranking.length - 1
+      competingBids: ranking.length - 1,
+      balanceIfAwarded: account.balance - principal
     });
   }
   if (request.method === "POST" && pathname === "/api/bids") {
@@ -666,9 +1057,9 @@ async function handle(request, response) {
     const existingIndex = store.bids.findIndex((bid) =>
       bid.era === company.era && bid.companyId === company.id && bid.teamKey === session.teamKey
     );
-    const committed = teamCommittedCapital(store, session.teamKey, existingIndex);
-    if (committed + principal > VAULT_CAPITAL) {
-      return sendError(response, 400, `This offer would exceed your total ${VAULT_CAPITAL.toLocaleString("en-IN")} rupee team vault across all eras.`);
+    const account = store.banking.accounts[session.teamKey];
+    if (!account || principal > account.balance) {
+      return sendError(response, 400, "This offer exceeds your available cash balance.");
     }
     const bid = {
       era: company.era,
@@ -688,18 +1079,80 @@ async function handle(request, response) {
       message: "Your bid is on the leaderboard.",
       bvi: Number(bvi(bid, company).toFixed(4)),
       rank,
-      committed: committed + principal,
-      remaining: VAULT_CAPITAL - committed - principal
+      balanceIfAwarded: account.balance - principal
     });
   }
   if (pathname.startsWith("/api/admin/")) {
     const session = requireRole(request, response, "admin");
     if (!session) return;
 
+    if (request.method === "GET" && pathname === "/api/admin/events") {
+      const eras = companyEraOrder().map((era) => ({
+        id: era,
+        name: companies.find((company) => company.era === era).eraName
+      }));
+      return sendJson(response, 200, {
+        companies: companies.map(publicCompany),
+        eras,
+        setupErrors: bankingSetupErrors()
+      });
+    }
+
+    if (request.method === "GET" && pathname === "/api/admin/banking") {
+      const store = readStore();
+      const current = currentBankingGroup(store);
+      return sendJson(response, 200, {
+        ready: bankingSetupErrors().length === 0,
+        setupErrors: bankingSetupErrors(),
+        complete: store.banking.complete,
+        eraIndex: store.banking.activeEraIndex,
+        decadeIndex: store.banking.decadeIndex,
+        current: current?.group ? {
+          era: current.era,
+          eraName: current.eraName,
+          decade: current.group.decade,
+          decadeIndex: current.decadeIndex + 1,
+          decadeCount: current.decadeCount,
+          companies: current.group.companies.map((company) => {
+            const result = store.results[auctionKey(company.era, company.id)];
+            return {
+              id: company.id,
+              name: company.name,
+              auctioned: Boolean(result),
+              status: result?.status || "waiting",
+              winner: result?.winnerTeamKey
+                ? store.teams.find((team) => team.key === result.winnerTeamKey)?.name || null
+                : null,
+              npi: result?.npi ?? null,
+              interestPaid: result?.interestPaid ?? null
+            };
+          })
+        } : null,
+        teams: store.teams.map((team) => ({
+          name: team.name,
+          balance: store.banking.accounts[team.key]?.balance ?? VAULT_CAPITAL,
+          invested: (store.banking.accounts[team.key]?.portfolio || [])
+            .reduce((sum, position) => sum + position.principal, 0)
+        })),
+        lastSettlement: store.banking.settlementHistory.at(-1) || null
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/api/admin/banking/settle-decade") {
+      const store = readStore();
+      const settlement = settleBankingDecade(store);
+      writeStore(store);
+      return sendJson(response, 200, { settlement });
+    }
+
     if (request.method === "GET" && pathname === "/api/admin/teams") {
       const store = readStore();
       return sendJson(response, 200, {
-        teams: store.teams.map((team) => ({ name: team.name, createdAt: team.createdAt }))
+        teams: store.teams.map((team) => ({
+          name: team.name,
+          createdAt: team.createdAt,
+          balance: store.banking.accounts[team.key]?.balance ?? VAULT_CAPITAL
+        }))
       });
     }
 
@@ -723,6 +1176,7 @@ async function handle(request, response) {
         codeHash: crypto.scryptSync(code, salt, 64).toString("hex"),
         createdAt: new Date().toISOString()
       });
+      ensureBankingState(store);
       writeStore(store);
       return sendJson(response, 201, { team: name, accessCode: code });
     }
@@ -730,6 +1184,9 @@ async function handle(request, response) {
       const body = await readJson(request);
       const store = readStore();
       if (body.status === "closed") {
+        if (store.auction.status !== "open") {
+          return sendError(response, 409, "There is no open company auction to close.");
+        }
         finalizeAuction(store);
         store.auction = { ...store.auction, status: "closed" };
         writeStore(store);
@@ -740,8 +1197,21 @@ async function handle(request, response) {
       }
       const company = companies.find((item) => item.id === body.companyId && item.era === body.era);
       if (!company) return sendError(response, 400, "Choose a listed company.");
-      if (store.auction.status === "open") finalizeAuction(store);
-      delete store.results[auctionKey(company.era, company.id)];
+      const setupErrors = bankingSetupErrors();
+      if (setupErrors.length) {
+        return sendError(response, 409, setupErrors.join(" "));
+      }
+      if (store.auction.status === "open") {
+        return sendError(response, 409, "Close the current company auction before starting another.");
+      }
+      const current = currentBankingGroup(store);
+      if (!current?.group || company.era !== current.era
+          || !current.group.companies.some((item) => item.id === company.id)) {
+        return sendError(response, 409, "Only a company in the active decade can be opened.");
+      }
+      if (store.results[auctionKey(company.era, company.id)]) {
+        return sendError(response, 409, "This company auction has already closed.");
+      }
       store.auction = { status: "open", era: company.era, companyId: company.id };
       writeStore(store);
       return sendJson(response, 200, { auction: store.auction });

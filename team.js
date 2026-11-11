@@ -67,6 +67,53 @@ function showWonBids(results) {
   });
 }
 
+function renderBankingAccount(banking) {
+  const section = document.querySelector("#banking-account");
+  const period = document.querySelector("#banking-account-period");
+  const balance = document.querySelector("#banking-account-balance");
+  const portfolio = document.querySelector("#banking-account-portfolio");
+  const ledger = document.querySelector("#banking-account-ledger");
+  if (!banking) return;
+  period.textContent = banking.current
+    ? `${banking.current.eraName} · ${banking.current.decade || "Era settlement"} · decade ${banking.current.decadeIndex}/${banking.current.decadeCount}`
+    : "All eras complete";
+  balance.textContent = formatRupees(banking.balance);
+  const positions = [
+    ...(banking.portfolio || []).map((position) => ({ ...position, archived: false })),
+    ...(banking.history || []).map((position) => ({ ...position, archived: true }))
+  ];
+  if (!positions.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No company positions yet. Uninvested cash compounds at 6% annually.";
+    portfolio.replaceChildren(empty);
+  } else {
+    portfolio.replaceChildren(...positions.slice(-12).reverse().map((position) => {
+      const row = document.createElement("article");
+      const name = document.createElement("strong");
+      name.textContent = position.companyName;
+      const detail = document.createElement("span");
+      detail.textContent = position.npi === null
+        ? `${position.decade} · INVESTED ${formatRupees(position.principal)} · awaiting decade result`
+        : `${position.decade} · NPI ${Number(position.npi).toFixed(2)} · interest ${formatRupees(position.interestPaid)}${position.archived ? ` · era-end principal ${formatRupees(position.principalReturned)}` : ""}`;
+      row.append(name, detail);
+      return row;
+    }));
+  }
+  ledger.replaceChildren(...(banking.ledger || []).slice(0, 10).map((entry) => {
+    const item = document.createElement("li");
+    const amount = entry.amount >= 0 ? `+${formatRupees(entry.amount)}` : formatRupees(entry.amount);
+    const source = entry.type === "bond"
+      ? `6% bond growth · ${entry.decade}`
+      : entry.type === "company-interest"
+        ? `Company interest · ${entry.companyId}`
+        : `Principal return · ${entry.companyId}`;
+    item.textContent = `${source} · ${amount}`;
+    return item;
+  }));
+  section.hidden = document.body.dataset.round === "2";
+}
+
 function renderStandings(bids, myBid) {
   const list = document.querySelector("#participant-leaderboard");
   const empty = document.querySelector("#participant-board-empty");
@@ -164,7 +211,10 @@ function renderAuction(data) {
   if (!company) {
     waiting.hidden = false;
     deal.hidden = true;
-    document.querySelector("#team-auction-title").textContent = "Waiting for the auction";
+    const currentPeriod = data.banking
+      ? `${data.banking.eraName} · ${data.banking.decade || "era settlement"}`
+      : "Waiting for the auction";
+    document.querySelector("#team-auction-title").textContent = currentPeriod;
     label.textContent = "WAITING";
     status.classList.remove("is-open", "is-closed");
     waiting.querySelector("h3").textContent = "The next company will appear here.";
@@ -477,10 +527,12 @@ async function submitBloodlinesAllocation(event) {
 async function refreshTeamPanel() {
   try {
     if (document.body.dataset.round === "2") {
+      document.querySelector("#banking-account").hidden = true;
       const state = await api("/api/bloodlines/state");
       renderBloodlines(state);
       return;
     }
+    document.querySelector("#banking-account").hidden = false;
     document.querySelector("#bloodlines-team-panel").hidden = true;
     document.querySelector("#team-auction").hidden = false;
     const [auction, results] = await Promise.all([
@@ -489,6 +541,7 @@ async function refreshTeamPanel() {
     ]);
     renderAuction(auction);
     showWonBids(results.results);
+    renderBankingAccount(results.banking);
   } catch (error) {
     if (error.message.startsWith("Sign in")) {
       clearInterval(teamState.poll);

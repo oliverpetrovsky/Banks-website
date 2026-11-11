@@ -1,5 +1,6 @@
 const adminState = {
   data: null,
+  banking: null,
   poll: null,
   editingSelection: false,
   authenticated: false
@@ -50,6 +51,7 @@ function renderDashboard() {
     option.textContent = era.name;
     return option;
   }));
+  eraSelect.disabled = true;
   refreshCompanySelect();
   applyRoundMode();
 }
@@ -59,7 +61,7 @@ function applyRoundMode() {
   document.querySelector("#admin-dashboard").hidden = isRoundTwo || !adminState.authenticated;
   document.querySelector("#bloodlines-admin-panel").hidden = !isRoundTwo || !adminState.authenticated;
   const form = document.querySelector("#auction-control-form");
-  form.elements.era.disabled = isRoundTwo;
+  form.elements.era.disabled = true;
   form.elements.companyId.disabled = isRoundTwo;
   form.querySelector('button[type="submit"]').disabled = isRoundTwo;
   document.querySelector("#close-auction").disabled = isRoundTwo;
@@ -68,8 +70,8 @@ function applyRoundMode() {
 
 function refreshCompanySelect(selectedId = "") {
   const form = document.querySelector("#auction-control-form");
-  const era = form.elements.era.value;
-  const companies = adminState.data.companies.filter((company) => company.era === era);
+  const companies = (adminState.banking?.current?.companies || [])
+    .filter((company) => !company.auctioned);
   const select = form.elements.companyId;
   select.replaceChildren(...companies.map((company) => {
     const option = document.createElement("option");
@@ -78,6 +80,8 @@ function refreshCompanySelect(selectedId = "") {
     return option;
   }));
   if (selectedId && companies.some((company) => company.id === selectedId)) select.value = selectedId;
+  select.disabled = !adminState.banking?.ready || companies.length === 0;
+  form.querySelector('button[type="submit"]').disabled = select.disabled;
 }
 
 async function createTeam(event) {
@@ -152,9 +156,77 @@ function renderTeams(teams) {
   }
   list.replaceChildren(...teams.map((team) => {
     const item = document.createElement("li");
-    item.textContent = team.name;
+    item.textContent = `${team.name} · CASH ${formatRupees(team.balance)}`;
     return item;
   }));
+}
+
+function renderBankingProgress(state, auctionStatus) {
+  const period = document.querySelector("#banking-period");
+  const progress = document.querySelector("#banking-progress");
+  const message = document.querySelector("#banking-message");
+  const errors = document.querySelector("#banking-errors");
+  const settleButton = document.querySelector("#banking-settle-decade");
+  const teams = document.querySelector("#banking-team-balances");
+  const result = document.querySelector("#banking-settlement-result");
+  const startButton = document.querySelector("#auction-control-form").querySelector('button[type="submit"]');
+
+  errors.hidden = state.setupErrors.length === 0;
+  errors.replaceChildren(...state.setupErrors.map((text) => {
+    const item = document.createElement("p");
+    item.textContent = text;
+    return item;
+  }));
+  if (!state.current) {
+    period.textContent = state.complete ? "Round 1 is complete" : "No active era";
+    progress.textContent = state.complete ? "COMPLETE" : "NOT READY";
+    message.textContent = state.complete
+      ? "All eras and decade settlements are complete. Team balances carry forward with no open company positions."
+      : "Correct the company dataset errors before running Round 1.";
+  } else {
+    period.textContent = `${state.current.eraName} · ${state.current.decade}`;
+    progress.textContent = `DECADE ${String(state.current.decadeIndex).padStart(2, "0")} / ${state.current.decadeCount}`;
+    const pending = state.current.companies.filter((company) => !company.auctioned).length;
+    message.textContent = state.ready
+      ? `${pending} company auction${pending === 1 ? "" : "s"} remain in this decade. Idle cash compounds at 6% annually; decade interest and NPI settle after every company closes.`
+      : "Correct the company dataset errors before opening or settling auctions.";
+  }
+  teams.replaceChildren(...state.teams.map((team) => {
+    const item = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = team.name;
+    const balance = document.createElement("span");
+    balance.textContent = `CASH ${formatRupees(team.balance)} · INVESTED ${formatRupees(team.invested)}`;
+    item.append(name, balance);
+    return item;
+  }));
+  const last = state.lastSettlement;
+  result.hidden = !last;
+  if (last) {
+    const heading = document.createElement("strong");
+    heading.textContent = `LAST SETTLEMENT · ${last.eraName} · ${last.decade}`;
+    const rows = document.createElement("div");
+    rows.className = "banking-settlement-rows";
+    for (const outcome of last.outcomes) {
+      const row = document.createElement("p");
+      row.textContent = `${outcome.companyName || outcome.companyId} · NPI ${Number(outcome.npi).toFixed(2)} · Interest paid ${formatRupees(outcome.interestPaid)}`;
+      rows.append(row);
+    }
+    if (last.eraSettlement) {
+      const eraHeading = document.createElement("strong");
+      eraHeading.textContent = "ERA-END PRINCIPAL RETURNS";
+      rows.append(eraHeading);
+      for (const payout of last.eraSettlement.principalReturns) {
+        const row = document.createElement("p");
+        row.textContent = `${payout.teamName} · ${payout.companyName} · NPI ${Number(payout.npi).toFixed(2)} · ${formatRupees(payout.principalReturned)}`;
+        rows.append(row);
+      }
+    }
+    result.replaceChildren(heading, rows);
+  }
+  const currentPending = state.current?.companies?.some((company) => !company.auctioned);
+  settleButton.disabled = !state.ready || !state.current || Boolean(currentPending) || auctionStatus === "open";
+  startButton.disabled = !state.ready || !currentPending || auctionStatus === "open";
 }
 
 function renderStandings(auction, board) {
@@ -162,12 +234,19 @@ function renderStandings(auction, board) {
   const title = document.querySelector("#admin-board-title");
   const caption = document.querySelector("#admin-board-caption");
   const target = document.querySelector("#admin-live-board");
+  document.querySelector("#close-auction").disabled = auction.status !== "open";
   renderTeams(board.teams);
 
   if (!auction.company) {
+    document.querySelector("#auction-control-form").querySelector('button[type="submit"]').disabled =
+      !adminState.banking?.ready || !adminState.banking?.current
+      || !adminState.banking.current.companies.some((company) => !company.auctioned)
+      || auction.status === "open";
     status.textContent = "Waiting for an auction.";
     title.textContent = "No company selected";
-    caption.textContent = "Choose a company and start the auction. The team leaderboard will appear here.";
+    caption.textContent = adminState.banking?.current
+      ? "Only companies in the active decade can be opened. Future companies are hidden from participants."
+      : "The team leaderboard will appear when the next company auction opens.";
     target.replaceChildren();
     return;
   }
@@ -178,9 +257,13 @@ function renderStandings(auction, board) {
   caption.textContent = `${auction.leaderboard.length} bids · ${auction.status === "open" ? "Open — standings update as teams bid." : "Closed — top bid is the confirmed winner."}`;
 
   const control = document.querySelector("#auction-control-form");
+  control.querySelector('button[type="submit"]').disabled = auction.status === "open"
+    || !adminState.banking?.ready;
   if (!adminState.editingSelection) {
     control.elements.era.value = company.era;
     refreshCompanySelect(company.id);
+    control.querySelector('button[type="submit"]').disabled = auction.status === "open"
+      || !adminState.banking?.ready;
   }
 
   if (auction.leaderboard.length === 0) {
@@ -231,10 +314,18 @@ async function refreshDashboard() {
       await refreshBloodlines();
       return;
     }
-    const [auction, teamData] = await Promise.all([
+    const [banking, auction, teamData] = await Promise.all([
+      api("/api/admin/banking"),
       api("/api/auction"),
       api("/api/admin/teams")
     ]);
+    adminState.banking = banking;
+    const eraSelect = document.querySelector("#auction-control-form").elements.era;
+    if (banking.current && eraSelect.value !== banking.current.era) {
+      eraSelect.value = banking.current.era;
+    }
+    refreshCompanySelect();
+    renderBankingProgress(banking, auction.status);
     renderStandings(auction, teamData);
   } catch (error) {
     if (error.message.includes("Sign in")) {
@@ -464,6 +555,7 @@ async function login(event) {
       method: "POST",
       body: JSON.stringify({ password: new FormData(form).get("password") })
     });
+    adminState.data = await api("/api/admin/events");
     renderDashboard();
     startPolling();
   } catch (error) {
@@ -484,18 +576,29 @@ async function logout() {
   }
 }
 
+async function settleBankingDecade() {
+  const button = document.querySelector("#banking-settle-decade");
+  button.disabled = true;
+  try {
+    await api("/api/admin/banking/settle-decade", { method: "POST", body: "{}" });
+    await refreshDashboard();
+    showToast("Decade settled; cash growth and company outcomes are recorded.");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function initialize() {
   document.querySelector("#admin-login").addEventListener("submit", login);
   const control = document.querySelector("#auction-control-form");
-  control.elements.era.addEventListener("change", () => {
-    adminState.editingSelection = true;
-    refreshCompanySelect();
-  });
   control.elements.companyId.addEventListener("change", () => { adminState.editingSelection = true; });
   document.querySelector("#team-create-form").addEventListener("submit", createTeam);
   control.addEventListener("submit", openAuction);
   document.querySelector("#close-auction").addEventListener("click", closeAuction);
   document.querySelector("#admin-refresh").addEventListener("click", refreshDashboard);
+  document.querySelector("#banking-settle-decade").addEventListener("click", settleBankingDecade);
   document.querySelector("#admin-logout").addEventListener("click", logout);
   document.querySelector("#bloodlines-admin-logout").addEventListener("click", logout);
   document.querySelector("#bloodlines-admin-refresh").addEventListener("click", refreshBloodlines);
@@ -510,9 +613,9 @@ async function initialize() {
   });
   applyRoundMode();
   try {
-    adminState.data = await api("/api/events");
     const session = await api("/api/auth/session");
     if (session.authenticated && session.role === "admin") {
+      adminState.data = await api("/api/admin/events");
       renderDashboard();
       startPolling();
     }

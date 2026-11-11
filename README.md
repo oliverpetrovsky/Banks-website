@@ -43,23 +43,27 @@ Open `http://localhost:3000`. The public leaderboard only shows results after an
 
 1. Open `/admin` and sign in with `ADMIN_PASSWORD`.
 2. Create an account for each registered team. Give each team its name and one-time access code privately; the code is only displayed when the account is created.
-3. Before the live round, select an era and company, then start the auction. Only the active company accepts bids.
-4. Participants open `/team` and sign in with their team name and access code. Their BVI and estimated rank recalculate as they edit principal and interest.
-5. Submitted bids appear on the live leaderboard. Teams can update their bid while that company is open. Close the auction before moving to the next company.
-6. Once an auction is closed, the public leaderboard shows its winning team and BVI. The winning team can read the company's additional briefing in its team panel.
+3. Round 1 runs through each era's ten decade groups in year-range order. Start and close each company auction in the active decade, then settle the decade before the next one opens.
+4. Participants open `/team` and sign in with their team name and access code. Their BVI and estimated rank recalculate as they edit principal and interest. Offers cannot exceed their available cash.
+5. Only the active company is sent to participants. Upcoming company details are served only to signed-in admins.
+6. Decade settlement calculates each awarded company's NPI and any interest due, and credits 6% annual compound growth on uninvested cash. At decade ten, principal is returned according to the final NPI tier and all company positions for that era are cleared.
+7. The public leaderboard shows closed auction winners and BVI. The winning team can read the company's additional briefing in its team panel.
 
 ## Round 1 rules implemented
 
-- Each team has one ₹6,00,000 vault total, shared across all three eras.
+- Each team starts with a ₹6,00,000 cash balance once; cash carries forward and compounds across eras.
 - The maximum offer for a single company is ₹2,50,000.
 - Principal is submitted in ₹10,000 increments, at or above the company's minimum funding floor.
 - Interest is submitted in 0.5% increments, no higher than the company's maximum rate.
 - The site calculates `BVI = (principal offered / principal requested) × ((maximum rate − offered rate) / maximum rate)`.
 - Leaderboard ties are resolved by lower interest, then the earliest current bid. Updating a bid gives it a new submission time.
-- Admins can open one company at a time, close the current auction, and monitor all bids for the active company.
-- The website does not calculate company outcomes or team net-profit rankings; those require the event engine after the auction.
+- Every era must contain exactly ten distinct decade groups, each labeled with a ten-year range such as `1811-1820`. Admins can auction only companies in the current group, and must close each auction before settling that decade.
+- At each decade settlement, uninvested team cash compounds at 6% per annum for ten years. Each winning bid's NPI is `max(0, strategicCoefficient × (fundingModifier − interestDrag) / 100)`, where `fundingModifier = min(100, winning principal / principal required × 100)` and `interestDrag` is the winning annual interest rate in percentage points. NPI is rounded to two decimals and clamped to 0–100 before applying payout thresholds.
+- NPI ≥ 50 earns simple interest for that decade: `principal × annual rate × 10`. Interest is paid once, at the decade settlement.
+- At era end, positions with NPI < 50 return 40% of principal; positions with 50 ≤ NPI < 75 return principal; positions with NPI ≥ 75 return `principal × growthMultiplier`. A team's cash carries forward and its company portfolio is cleared before the next era.
+- The private company dataset must include `strategicCoefficient` (0–100) and `growthMultiplier` (>0) for every company. It must include exactly ten unique, non-overlapping decade ranges for each era. To encode a firm that should never pass the interest threshold without an explicit scam label, keep its private strategic coefficient at or below 49. Do not expose these private scoring fields in participant responses.
 
-Bid records and salted team access-code hashes are saved in `.data/bids.json` by default and survive a restart. Admin sessions and team login sessions expire on restart. The current auction selection and status are saved with the bid data.
+Bid records, salted team access-code hashes, cash balances, company positions, and settlement history are saved in `.data/bids.json` by default and survive a restart. Admin sessions and team login sessions expire on restart. Back up this file before changing the company dataset or resetting a test event.
 
 ## Round 2: Bloodlines
 

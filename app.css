@@ -199,6 +199,24 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .bloodlines-admin-teams { display: grid; gap: 7px; }
 .bloodlines-admin-team { padding: 11px; display: grid; grid-template-columns: 1.2fr 1fr 1.5fr auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 4px; background: #171716; }
 .bloodlines-admin-team strong { font-size: 10px; }.bloodlines-admin-team > span { font-size: 7px; }.bloodlines-admin-team b { color: var(--yellow); font: 12px var(--mono); }
+.banking-flow, .banking-account { margin: 18px 0; padding: 16px; border: 1px solid var(--line); border-radius: 5px; background: #171716; }
+.banking-flow h2, .banking-account h2 { font-size: clamp(22px, 3vw, 32px); }
+.banking-flow .live-indicator { color: var(--yellow); font: 8px var(--mono); letter-spacing: .08em; }
+.banking-errors { margin: 12px 0; padding: 10px 12px; border: 1px solid #8a3c3c; border-radius: 4px; background: #2a1717; color: #f0aaaa; font-size: 9px; line-height: 1.55; }
+.banking-errors p { margin: 3px 0; }
+.banking-team-balances { margin: 12px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 7px; }
+.banking-team-balances > div { padding: 9px; display: grid; gap: 5px; border: 1px solid var(--line); border-radius: 4px; }
+.banking-team-balances strong, .banking-account-portfolio strong { color: var(--ink); font-size: 9px; }
+.banking-team-balances span, .banking-account-portfolio span { color: var(--smoke); font: 7px/1.5 var(--mono); }
+.banking-settlement-result { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--smoke); font-size: 9px; }
+.banking-settlement-rows { margin-top: 7px; display: grid; gap: 3px; }
+.banking-settlement-rows p { margin: 0; }
+.banking-account { margin-top: 12px; }
+.banking-account-balance { color: var(--yellow); font: 15px var(--mono); }
+.banking-account-portfolio { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 7px; }
+.banking-account-portfolio article { padding: 10px; display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 4px; }
+.banking-account-ledger { margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 15px; list-style: none; }
+.banking-account-ledger li { color: var(--muted); font: 7px/1.5 var(--mono); }
 
 @media (max-width: 760px) {
   .topbar { min-height: 65px; flex-wrap: wrap; gap: 10px 12px; }.wordmark { gap: 7px; font-size: 9px; }.wordmark-icon { width: 26px; height: 26px; }.wordmark-sub { font-size: 6px; }.site-nav { gap: 12px; }.nav-link { font-size: 7px; }.round-switcher, .round-indicator { margin-left: auto; }
