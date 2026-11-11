@@ -1,7 +1,11 @@
-const ROUND_STORAGE_KEY = "banks-bloodlines-round";
+let activeRound = null;
+let adminAuthorized = false;
+let roundRequestPending = false;
 
-function selectRound(round, persist = true) {
-  const selectedRound = round === "2" ? "2" : "1";
+function renderRound(round) {
+  const selectedRound = round === 2 ? "2" : "1";
+  const changed = activeRound !== selectedRound;
+  activeRound = selectedRound;
   document.body.dataset.round = selectedRound;
   document.querySelectorAll("[data-round-select]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.roundSelect === selectedRound));
@@ -11,20 +15,94 @@ function selectRound(round, persist = true) {
       ? "ROUND 02 / BLOODLINES"
       : "ROUND 01 / THE BANKING SYNDICATE";
   });
+  document.querySelectorAll("[data-round-indicator]").forEach((indicator) => {
+    indicator.textContent = selectedRound === "2" ? "R2 · BLOODLINES" : "R1 · BANKING";
+  });
   const notice = document.querySelector("#round-two-notice");
   if (notice) notice.hidden = selectedRound !== "2";
-  if (persist) localStorage.setItem(ROUND_STORAGE_KEY, selectedRound);
-  document.dispatchEvent(new CustomEvent("banks-round-change", {
-    detail: { round: selectedRound }
-  }));
+  if (changed) {
+    document.dispatchEvent(new CustomEvent("banks-round-change", {
+      detail: { round: selectedRound }
+    }));
+  }
+}
+
+function setAdminAuthorization(authorized) {
+  adminAuthorized = authorized;
+  const switcher = document.querySelector("#admin-round-switcher");
+  if (!switcher) return;
+  switcher.hidden = !authorized;
+  switcher.querySelectorAll("button").forEach((button) => {
+    button.disabled = !authorized || roundRequestPending;
+  });
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...options.headers },
+    ...options
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || "The request could not be completed.");
+  return body;
+}
+
+async function refreshRound() {
+  try {
+    const data = await fetchJson("/api/round");
+    renderRound(data.round);
+  } catch (error) {
+    document.querySelectorAll("[data-round-indicator]").forEach((indicator) => {
+      indicator.textContent = "ROUND STATUS UNAVAILABLE";
+    });
+    const message = document.querySelector("#admin-round-message");
+    if (message) message.textContent = error.message;
+  }
+}
+
+async function refreshAdminAuthorization() {
+  if (!document.querySelector("#admin-round-switcher")) return;
+  try {
+    const session = await fetchJson("/api/auth/session");
+    setAdminAuthorization(session.authenticated && session.role === "admin");
+  } catch (error) {
+    setAdminAuthorization(false);
+    const message = document.querySelector("#admin-round-message");
+    if (message) message.textContent = error.message;
+  }
+}
+
+async function changeRound(event) {
+  const button = event.currentTarget;
+  const message = document.querySelector("#admin-round-message");
+  if (!adminAuthorized || roundRequestPending) return;
+  roundRequestPending = true;
+  setAdminAuthorization(true);
+  if (message) message.textContent = "";
+  try {
+    const result = await fetchJson("/api/admin/round", {
+      method: "POST",
+      body: JSON.stringify({ round: Number(button.dataset.roundSelect) })
+    });
+    renderRound(result.round);
+  } catch (error) {
+    if (message) message.textContent = error.message;
+    await refreshRound();
+    await refreshAdminAuthorization();
+  } finally {
+    roundRequestPending = false;
+    setAdminAuthorization(adminAuthorized);
+  }
 }
 
 document.querySelectorAll("[data-round-select]").forEach((button) => {
-  button.addEventListener("click", () => selectRound(button.dataset.roundSelect));
+  button.addEventListener("click", changeRound);
 });
+window.addEventListener("banks-admin-authenticated", () => refreshAdminAuthorization());
+window.addEventListener("banks-admin-signed-out", () => setAdminAuthorization(false));
 
-selectRound(localStorage.getItem(ROUND_STORAGE_KEY) || "1", false);
-
-window.addEventListener("storage", (event) => {
-  if (event.key === ROUND_STORAGE_KEY) selectRound(event.newValue || "1", false);
-});
+refreshRound();
+refreshAdminAuthorization();
+setInterval(refreshRound, 2000);
+setInterval(refreshAdminAuthorization, 5000);

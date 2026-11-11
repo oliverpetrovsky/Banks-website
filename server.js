@@ -89,7 +89,8 @@ function readStore() {
         teams: [...initialTeams],
         results: {},
         initialTeamsSeeded: initialTeams.length > 0,
-        auction: { status: "waiting", era: null, companyId: null }
+        auction: { status: "waiting", era: null, companyId: null },
+        activeRound: 1
       };
       if (initialTeams.length) writeStore(store);
       return store;
@@ -104,7 +105,8 @@ function readStore() {
     initialTeamsSeeded: stored.initialTeamsSeeded === true,
     auction: stored.auction && typeof stored.auction === "object"
       ? stored.auction
-      : { status: "waiting", era: null, companyId: null }
+      : { status: "waiting", era: null, companyId: null },
+    activeRound: stored.activeRound === 2 ? 2 : 1
   };
   if (initialTeams.length && !store.initialTeamsSeeded) {
     const existingKeys = new Set(store.teams.map((team) => team.key));
@@ -470,6 +472,22 @@ async function handle(request, response) {
       return sendJson(response, 200, { authenticated: false });
     }
     return sendJson(response, 200, { authenticated: true, role: "participant", team: team.name });
+  }
+  if (request.method === "GET" && pathname === "/api/round") {
+    const store = readStore();
+    return sendJson(response, 200, { round: store.activeRound });
+  }
+  if (request.method === "POST" && pathname === "/api/admin/round") {
+    if (!requireRole(request, response, "admin")) return;
+    const body = await readJson(request);
+    if (!body || typeof body !== "object" || Array.isArray(body)
+        || body.round !== 1 && body.round !== 2) {
+      return sendError(response, 400, "Choose Round 1 or Round 2.");
+    }
+    const store = readStore();
+    store.activeRound = body.round;
+    writeStore(store);
+    return sendJson(response, 200, { round: store.activeRound });
   }
   if (request.method === "POST" && pathname === "/api/auth/login") {
     const body = await readJson(request);

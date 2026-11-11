@@ -47,6 +47,8 @@ a { color: inherit; }
 .nav-link:hover, .nav-link.is-active { color: var(--yellow); }
 .nav-link.is-active::after { position: absolute; right: 0; bottom: 3px; left: 0; height: 1px; background: var(--yellow); content: ""; }
 .round-switcher { display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 5px; background: #171716; }
+.round-indicator { margin-left: auto; padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; background: #171716; color: var(--smoke); font: 7px var(--mono); letter-spacing: .04em; white-space: nowrap; }
+.admin-round-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }.admin-round-message:empty { display: none; }.admin-round-message { color: var(--red); font-size: 8px; }
 .round-switcher button { min-height: 28px; padding: 0 8px; border: 0; border-radius: 3px; background: transparent; color: var(--muted); font: 7px var(--mono); letter-spacing: .04em; white-space: nowrap; }
 .round-switcher button[aria-pressed="true"] { background: var(--yellow); color: var(--noir); }
 .round-switcher button:hover:not([aria-pressed="true"]) { color: var(--ink); }
@@ -149,6 +151,32 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .bloodlines-news article span, .bloodlines-insurance legend, .bloodlines-admin-team > span { color: var(--gold); font: 7px var(--mono); letter-spacing: .07em; }
 .bloodlines-news p { margin: 7px 0 0; color: var(--smoke); font-size: 10px; line-height: 1.6; }
 .bloodlines-wheel { margin: 13px 0; padding: 12px; border: 1px solid var(--accent-card-border); border-radius: 4px; background: var(--accent-card-surface); color: var(--yellow); font: 9px var(--mono); }
+.bloodlines-wheel-status { display: flex; align-items: center; gap: 12px; }.bloodlines-wheel-status p { color: var(--ink); font-size: 10px; }
+.wheel-spinner { width: 37px; height: 37px; flex: 0 0 37px; display: inline-block; border: 2px solid #6f2a22; border-radius: 50%; background: conic-gradient(from 0deg, #ed673f 0 12%, #321a18 12% 25%, #f0ad55 25% 37%, #321a18 37% 50%, #ed673f 50% 62%, #321a18 62% 75%, #f0ad55 75% 87%, #321a18 87%); box-shadow: inset 0 0 0 5px #171716; }
+.wheel-spinner.is-spinning { animation: bloodlines-wheel-spin .65s linear infinite; }
+@keyframes bloodlines-wheel-spin { to { transform: rotate(360deg); } }
+.bloodlines-wheel-entries { margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; list-style: none; }
+.bloodlines-wheel-entries li, .bloodlines-wheel-entry { min-width: 0; padding: 9px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: 4px; background: #171716; }
+.bloodlines-wheel-entries li strong, .bloodlines-wheel-entry strong { overflow: hidden; color: var(--ink); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.bloodlines-wheel-entries li span, .bloodlines-wheel-entry > span { color: var(--muted); font: 7px var(--mono); text-align: right; }
+.bloodlines-wheel-entries li.is-spinning, .bloodlines-wheel-entry.is-spinning { border-color: var(--accent); }
+.bloodlines-wheel-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.bloodlines-public-wheel { margin: 14px 0; padding: 13px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }.bloodlines-public-wheel h3 { margin: 0; font-size: 15px; }
+.bloodlines-wheel-entry .wheel-spinner { width: 26px; height: 26px; flex-basis: 26px; }
+.bloodlines-wheel-entry b { color: var(--yellow); font: 7px var(--mono); text-align: right; }
+.bloodlines-schedule { margin: 18px 0; padding: 14px; border: 1px solid var(--line); border-radius: 4px; }
+.bloodlines-schedule h2 { margin: 0; font-size: 20px; }
+.bloodlines-schedule-ranges { margin: 11px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.bloodlines-schedule-range { min-width: 0; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; border: 1px solid var(--line); }
+.bloodlines-schedule-range > span { grid-column: 1 / -1; color: var(--muted); font: 7px var(--mono); }
+.bloodlines-schedule-range input { min-width: 0; padding: 6px; }
+.bloodlines-news-control { margin: 14px 0; padding: 13px; display: grid; gap: 9px; border: 1px solid var(--line); border-radius: 4px; }
+.bloodlines-news-control textarea { width: 100%; min-height: 78px; padding: 9px; resize: vertical; }
+.bloodlines-news-control label > span { display: block; margin-bottom: 6px; color: var(--muted); font: 8px var(--mono); }
+.bloodlines-market { margin: 12px 0; padding: 11px; border: 1px solid var(--line); border-radius: 4px; background: #171716; }
+.bloodlines-market > strong { color: var(--yellow); font: 8px var(--mono); }
+.bloodlines-market-prices { margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.bloodlines-market-prices span { color: var(--smoke); font-size: 8px; }
 .bloodlines-allocation { margin-top: 17px; padding-top: 14px; border-top: 1px solid var(--line); }
 .bloodlines-add-trade { margin: 0 0 9px; }
 .bloodlines-allocation h3 { margin: 0; font-size: 20px; }
@@ -173,15 +201,15 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .bloodlines-admin-team strong { font-size: 10px; }.bloodlines-admin-team > span { font-size: 7px; }.bloodlines-admin-team b { color: var(--yellow); font: 12px var(--mono); }
 
 @media (max-width: 760px) {
-  .topbar { min-height: 65px; flex-wrap: wrap; gap: 10px 12px; }.wordmark { gap: 7px; font-size: 9px; }.wordmark-icon { width: 26px; height: 26px; }.wordmark-sub { font-size: 6px; }.site-nav { gap: 12px; }.nav-link { font-size: 7px; }.round-switcher { margin-left: auto; }
+  .topbar { min-height: 65px; flex-wrap: wrap; gap: 10px 12px; }.wordmark { gap: 7px; font-size: 9px; }.wordmark-icon { width: 26px; height: 26px; }.wordmark-sub { font-size: 6px; }.site-nav { gap: 12px; }.nav-link { font-size: 7px; }.round-switcher, .round-indicator { margin-left: auto; }
   .public-hero { min-height: 340px; padding: 47px 25px 49px; grid-template-columns: minmax(0, 1fr) minmax(130px, .6fr); }.public-hero-art { min-height: 190px; }.art-orbit { width: 175px; height: 175px; }.orbit-two { width: 130px; height: 130px; }.art-core { width: 62px; height: 62px; font-size: 34px; }.hero-footnote { right: 25px; left: 25px; }
-  .public-summary { padding-right: 25px; padding-left: 25px; }.public-board-section { padding-right: 25px; padding-left: 25px; }.panel-main { padding-top: 37px; }.admin-columns { grid-template-columns: 1fr; }.auth-card:has(.auth-copy) { grid-template-columns: 1fr; gap: 16px; }.bloodlines-admin-team { grid-template-columns: 1fr 1fr; }
+  .public-summary { padding-right: 25px; padding-left: 25px; }.public-board-section { padding-right: 25px; padding-left: 25px; }.panel-main { padding-top: 37px; }.admin-columns { grid-template-columns: 1fr; }.auth-card:has(.auth-copy) { grid-template-columns: 1fr; gap: 16px; }.bloodlines-admin-team { grid-template-columns: 1fr 1fr; }.bloodlines-schedule-ranges { grid-template-columns: repeat(2, minmax(0, 1fr)); }.bloodlines-market-prices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
-  .topbar { flex-wrap: wrap; justify-content: center; gap: 0 12px; padding: 8px 12px; }.topbar .wordmark { margin-right: auto; }.site-nav { gap: 10px; }.nav-link { font-size: 6px; }.round-switcher { flex: 1 0 100%; justify-content: center; margin: 7px 0 2px; }.round-switcher button { min-height: 26px; padding: 0 12px; font-size: 6px; }
+  .topbar { flex-wrap: wrap; justify-content: center; gap: 0 12px; padding: 8px 12px; }.topbar .wordmark { margin-right: auto; }.site-nav { gap: 10px; }.nav-link { font-size: 6px; }.round-switcher { flex: 1 0 100%; justify-content: center; margin: 7px 0 2px; }.round-indicator { flex: 1 0 100%; margin: 7px 0 2px; text-align: center; }.admin-round-controls { flex: 1 0 100%; align-items: center; }.admin-round-controls .round-switcher { flex: 0 0 auto; }.round-switcher button { min-height: 26px; padding: 0 12px; font-size: 6px; }
   .public-hero { min-height: 455px; padding: 43px 20px 46px; grid-template-columns: 1fr; align-content: start; }.public-hero-copy { z-index: 2; }.public-hero-copy .eyebrow { font-size: 7px; }.public-hero-art { min-height: 168px; }.art-orbit { width: 160px; height: 160px; }.orbit-two { width: 120px; height: 120px; }.hero-footnote { right: 20px; left: 20px; font-size: 6px; }.hero-footnote span:last-child { max-width: 47%; text-align: right; }
   .public-summary { grid-template-columns: 1fr 1fr; gap: 13px; padding: 16px 20px; }.public-status { justify-self: start; text-align: left; }.public-board-section { padding: 37px 20px 48px; }.public-board-heading { align-items: start; }.public-leaderboard, .team-results { grid-template-columns: 1fr; }.result-row { min-height: 69px; }
-  .panel-main { padding: 34px 16px 48px; }.panel-heading { margin-bottom: 22px; }.panel-heading h1 { font-size: 36px; }.auth-card, .admin-panel { padding: 15px; }.panel-toolbar { align-items: flex-start; }.panel-toolbar .button-row { flex-direction: column; }.panel-toolbar .button { min-height: 32px; }.bloodlines-summary, .bloodlines-admin-overview { grid-template-columns: 1fr 1fr; }.bloodlines-news, .bloodlines-lower-grid { grid-template-columns: 1fr; }.bloodlines-admin-team { grid-template-columns: 1fr; }
+  .panel-main { padding: 34px 16px 48px; }.panel-heading { margin-bottom: 22px; }.panel-heading h1 { font-size: 36px; }.auth-card, .admin-panel { padding: 15px; }.panel-toolbar { align-items: flex-start; }.panel-toolbar .button-row { flex-direction: column; }.panel-toolbar .button { min-height: 32px; }.bloodlines-summary, .bloodlines-admin-overview { grid-template-columns: 1fr 1fr; }.bloodlines-news, .bloodlines-lower-grid { grid-template-columns: 1fr; }.bloodlines-admin-team { grid-template-columns: 1fr; }.bloodlines-schedule-ranges, .bloodlines-wheel-board, .bloodlines-wheel-entries { grid-template-columns: 1fr; }.bloodlines-market-prices { grid-template-columns: 1fr 1fr; }
   .deal-heading, .deal-workspace { grid-template-columns: 1fr; }.deal-financials { grid-template-columns: 1fr 1fr; }.deal-financials > div:first-child { grid-column: 1 / -1; }.active-deal { padding: 13px; }.bid-form { gap: 8px; }.formula-notes { flex-direction: column; gap: 6px; }
   .footer { padding: 9px 14px; }.footer-organizer { gap: 1px; }.ecell-logo { width: 42px; height: 40px; }
 }

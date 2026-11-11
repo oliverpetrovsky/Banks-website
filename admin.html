@@ -17,12 +17,15 @@
         <nav class="site-nav" aria-label="Main navigation">
           <a class="nav-link" href="/">LEADERBOARD</a><a class="nav-link" href="/team">TEAM PANEL</a><a class="nav-link is-active" href="/admin">ADMIN</a>
         </nav>
-        <div class="round-switcher" role="group" aria-label="Select event round">
-          <button type="button" data-round-select="1" aria-pressed="true">R1 · BANKING</button>
-          <button type="button" data-round-select="2" aria-pressed="false">R2 · BLOODLINES</button>
+        <div class="admin-round-controls">
+          <div id="admin-round-switcher" class="round-switcher" role="group" aria-label="Select event round" hidden>
+            <button type="button" data-round-select="1" aria-pressed="true" disabled>R1 · BANKING</button>
+            <button type="button" data-round-select="2" aria-pressed="false" disabled>R2 · BLOODLINES</button>
+          </div>
+          <span id="admin-round-message" class="admin-round-message" role="status"></span>
         </div>
       </header>
-      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Run the four-year household simulation from the controls below. Round 1 auction controls are unavailable while this round is selected.</p>
+      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Run an 80-year household simulation across nine sub-rounds. Round 1 auction controls are unavailable while this round is selected.</p>
       <main class="panel-main">
         <section class="panel-heading">
           <p class="eyebrow"><span class="eyebrow-line"></span> E-CELL EVENT CONTROL</p>
@@ -77,18 +80,33 @@
             <div class="button-row"><button class="button button-ghost" id="bloodlines-admin-refresh" type="button">REFRESH</button><button class="button button-outline" id="bloodlines-admin-logout" type="button">SIGN OUT</button></div>
           </div>
           <div class="bloodlines-admin-overview">
-            <div><span class="panel-index">YEAR</span><strong id="bloodlines-admin-year">—</strong></div>
+            <div><span class="panel-index">SUB-ROUND / YEAR</span><strong id="bloodlines-admin-year">—</strong></div>
             <div><span class="panel-index">STAGE</span><strong id="bloodlines-admin-stage">—</strong></div>
             <div><span class="panel-index">TEAMS SUBMITTED</span><strong id="bloodlines-admin-submissions">—</strong></div>
           </div>
-          <p id="bloodlines-admin-message" class="public-board-note">Start the simulation, then advance one stage at a time after the participants are ready.</p>
+          <p id="bloodlines-admin-message" class="public-board-note">Set the nine year ranges, then start the simulation. Each sub-round covers a contiguous portion of the 80-year timeline.</p>
+          <form id="bloodlines-schedule-form" class="bloodlines-schedule" hidden>
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> SIMULATION CONFIGURATION</p><h2>Sub-round year ranges</h2></div></div>
+            <p class="public-board-note">Ranges must be consecutive and cover Years 1–80 exactly.</p>
+            <div id="bloodlines-schedule-ranges" class="bloodlines-schedule-ranges"></div>
+            <button class="button button-outline" type="submit">SAVE YEAR RANGES</button>
+            <p class="form-message" aria-live="polite"></p>
+          </form>
           <div class="button-row bloodlines-admin-controls">
             <button class="button button-primary" type="button" data-bloodlines-action="start">START SIMULATION</button>
-            <button class="button button-primary" type="button" data-bloodlines-action="advance_stage">ADVANCE STAGE</button>
-            <button class="button button-danger" type="button" data-bloodlines-action="close_year">CLOSE YEAR</button>
+            <button class="button button-outline" type="button" data-bloodlines-action="begin_news">OPEN NEWS SEQUENCE</button>
+            <button class="button button-primary" type="button" data-bloodlines-action="begin_wheel">START TEAM WHEEL</button>
+            <button class="button button-primary" type="button" data-bloodlines-action="spin_next">SPIN NEXT TEAM</button>
+            <button class="button button-danger" type="button" data-bloodlines-action="close_subround">CLOSE SUB-ROUND</button>
             <button class="button button-primary" type="button" data-bloodlines-action="publish">PUBLISH FINAL SCORES</button>
           </div>
+          <form id="bloodlines-news-form" class="bloodlines-news-control" hidden>
+            <label><span id="bloodlines-news-label">NEWS FLASH</span><textarea name="text" maxlength="500" required placeholder="Write the event news for this simulation year"></textarea></label>
+            <button class="button button-primary" type="submit">RELEASE NEWS &amp; ADVANCE YEAR</button>
+            <p class="form-message" aria-live="polite"></p>
+          </form>
           <div class="admin-board-section"><div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> TEAM STATUS</p><h2>Simulation standings</h2></div></div><div id="bloodlines-admin-teams" class="bloodlines-admin-teams"></div></div>
+          <div class="admin-board-section"><div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> SEQUENTIAL TEAM SPINS</p><h2>Bloodlines Wheel</h2></div><span id="bloodlines-admin-wheel-current" class="live-indicator" hidden><i></i> SPINNING</span></div><div id="bloodlines-admin-wheel" class="bloodlines-wheel-board"></div></div>
           <div class="admin-board-section"><div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> ADMIN AUDIT TRAIL</p><h2>Recent actions</h2></div></div><ol id="bloodlines-audit-log" class="bloodlines-ledger"></ol></div>
         </section>
       </main>

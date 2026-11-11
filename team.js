@@ -237,6 +237,7 @@ function renderBloodlines(state, draftOverride = null) {
   const previousState = teamState.bloodlinesState;
   const allocationForm = document.querySelector("#bloodlines-allocation-form");
   const preserveForm = !draftOverride
+    && previousState?.subround === state.subround
     && previousState?.year === state.year
     && previousState?.stage === state.stage
     && allocationForm.querySelector("[data-instrument-row]");
@@ -259,11 +260,18 @@ function renderBloodlines(state, draftOverride = null) {
     draft.insurance = draftOverride.insurance;
   }
   if (draft.trades.length === 0) draft.trades = [{ instrument: "TECH", action: "hold", quantity: "" }];
-  title.textContent = state.started ? `Year ${state.year} · Household` : "Waiting for the simulation";
-  stage.textContent = state.started ? `STAGE ${state.stage} · ${state.stageName.replaceAll("_", " ").toUpperCase()}` : "WAITING";
+  title.textContent = state.started
+    ? `Sub-round ${state.subround} / ${state.subrounds} · Years ${state.years.start}–${state.years.end}`
+    : "Waiting for the simulation";
+  stage.textContent = state.started
+    ? `${state.stageName.replaceAll("_", " ").toUpperCase()}`
+    : "WAITING";
   notice.textContent = state.started
-    ? `Annual salary ${formatBloodlinesValue(state.current.salary)} · household expenses ${formatBloodlinesValue(state.current.expenses)} · ${state.status === "trading" ? "Trading is open; save your allocation before the admin advances." : "Your decisions are locked until the next trading window."}`
+    ? `Annual salary ${formatBloodlinesValue(state.current.salary)} · household expenses ${formatBloodlinesValue(state.current.expenses)} · ${state.status === "trading" ? "Allocation is open; save or update your portfolio." : `Simulation Year ${state.year} · decisions are locked until the next allocation window.`}`
     : "Your household ledger and investment decisions will appear when the admin starts Bloodlines.";
+  document.querySelector("#bloodlines-coverage").textContent = state.started
+    ? `ACTIVE INSURANCE · ${state.coverage.length ? state.coverage.join(" · ") : "No active cover"}`
+    : "";
 
   const summary = document.querySelector("#bloodlines-summary");
   summary.replaceChildren();
@@ -287,21 +295,66 @@ function renderBloodlines(state, draftOverride = null) {
   for (const item of state.news || []) {
     const article = document.createElement("article");
     const number = document.createElement("span");
-    number.textContent = `NEWS ${String(item.number).padStart(2, "0")}`;
+    number.textContent = `YEAR ${String(item.year).padStart(2, "0")}`;
     const text = document.createElement("p");
     text.textContent = item.text;
     article.append(number, text);
     news.append(article);
   }
+  const market = document.querySelector("#bloodlines-market");
+  market.hidden = !state.market;
+  market.replaceChildren();
+  if (state.market) {
+    const heading = document.createElement("strong");
+    heading.textContent = `YEAR ${state.market.year} MARKET PRICES`;
+    const prices = document.createElement("div");
+    prices.className = "bloodlines-market-prices";
+    for (const instrument of state.instruments) {
+      if (instrument.type === "fd") continue;
+      const item = document.createElement("span");
+      const price = instrument.type === "gold"
+        ? state.market.gold
+        : state.market[instrument.type === "equity" ? "equities" : "funds"][instrument.id];
+      item.textContent = `${instrument.name} · ${formatBloodlinesValue(price)}`;
+      prices.append(item);
+    }
+    market.append(heading, prices);
+  }
   const wheel = document.querySelector("#bloodlines-wheel");
-  wheel.hidden = !state.wheelEvent;
-  wheel.textContent = state.wheelEvent
-    ? `YEARLY EVENT · ${state.wheelEvent.name} · ${state.wheelEvent.description}`
-    : "";
+  const wheelVisible = ["wheel", "reallocation"].includes(state.stage)
+    || state.wheel.entries.some((entry) => entry.status !== "waiting");
+  wheel.hidden = !wheelVisible;
+  document.querySelector("#bloodlines-wheel-spinner").classList.toggle("is-spinning", Boolean(state.wheel.current));
+  document.querySelector("#bloodlines-wheel-current").textContent = state.wheel.current
+    ? `${state.wheel.current.team} is spinning…`
+    : state.stage === "wheel" ? "The next team is about to spin." : "All teams have completed their spin.";
+  const wheelEntries = document.querySelector("#bloodlines-wheel-entries");
+  wheelEntries.replaceChildren(...state.wheel.entries.map((entry) => {
+    const item = document.createElement("li");
+    item.className = entry.status === "spinning" ? "is-spinning" : "";
+    const name = document.createElement("strong");
+    name.textContent = entry.team;
+    const outcome = document.createElement("span");
+    outcome.textContent = entry.outcome
+      ? `${entry.outcome.name} · ${formatBloodlinesValue(entry.outcome.effect)}`
+      : entry.status === "spinning" ? "SPINNING NOW" : entry.status.toUpperCase();
+    item.append(name, outcome);
+    return item;
+  }));
 
-  allocationForm.hidden = !state.started;
-  allocationForm.dataset.year = String(state.year);
   const canTrade = state.status === "trading";
+  allocationForm.hidden = !canTrade;
+  allocationForm.dataset.year = String(state.year);
+  document.querySelector("#bloodlines-allocation-heading").textContent = state.stage === "reallocation"
+    ? "Reallocate after the Wheel"
+    : "Set your opening allocation";
+  document.querySelector(".bloodlines-insurance").hidden = !(
+    state.stage === "reallocation" && state.subround < state.subrounds
+      || state.stage === "allocation" && state.subround === 1
+  );
+  document.querySelector(".bloodlines-insurance legend").textContent = state.stage === "reallocation"
+    ? "INSURANCE FOR NEXT SUB-ROUND"
+    : "INSURANCE COVER";
   allocationForm.querySelectorAll("select, input, button").forEach((input) => { input.disabled = !canTrade; });
   const trades = document.querySelector("#bloodlines-trades");
   const instrumentById = new Map(state.instruments.map((instrument) => [instrument.id, instrument]));

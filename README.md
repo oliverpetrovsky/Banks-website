@@ -2,7 +2,7 @@
 
 Banks & Bloodlines is a finance strategy event conducted by E-Cell at SYNERGY, the college fest. The website has three panels: a public landing page and completed-auction leaderboard at `/`, event controls at `/admin`, and participant bidding at `/team`.
 
-The round switcher selects Round 1, **The Banking Syndicate**, or Round 2, **Bloodlines**. Each round has its own team and admin views; the selected round is remembered in the browser.
+Only a signed-in admin can switch the active event between Round 1, **The Banking Syndicate**, and Round 2, **Bloodlines**. The selected round is stored by the server, and public/team pages follow it automatically; those pages show the active round without offering a switch control.
 
 The app loads fictional companies from `data/test.json` by default. Event-specific company data is intentionally excluded from the public repository. When the approved event dataset is ready, keep it in a private local file and select it with `COMPANIES_FILE`.
 
@@ -63,11 +63,19 @@ Bid records and salted team access-code hashes are saved in `.data/bids.json` by
 
 ## Round 2: Bloodlines
 
-Bloodlines runs a four-year household investment simulation. Sign in at `/team` and select Round 2 to see household cash, investments, news, annual ledger, and the Stage 3 allocation form. The admin selects Round 2 at `/admin` to start the simulation, advance through its five stages, close each year, and publish final net-worth scores. The public page shows the scoreboard only after publication.
+Bloodlines guides each household through an 80-year simulation split into nine admin-configurable, consecutive sub-rounds. The default schedule covers Years 1–9, 10–18, and so on through Years 73–80. Before starting, the admin may edit the ranges; they must cover Years 1–80 exactly, with no gaps or overlap.
 
-The admin must advance stages deliberately. Every registered team must save an allocation before the Stage 3 trading window can close. The Wheel event is selected randomly with replacement once per year and is shared by all teams; it is not shown before Stage 5. Market prices are withheld until Stage 4. In the team panel, buy/sell lines are evaluated in submitted order, and the year-start reference prices are shown before the reveal.
+Each sub-round follows the same sequence:
 
-The repository's `data/bloodlines-test-market.json` is fictional test data only. For an event, create a private market JSON file and set `BLOODLINES_MARKET_FILE` to its path. It must contain four annual values for each instrument under `prices.equities` and `prices.funds`, plus four annual values in `prices.gold`. Never commit actual event prices. Bloodlines state is saved separately to `.data/bloodlines.json` by default; `BLOODLINES_STORE_FILE` can override that location. As with Round 1, Render's free filesystem is ephemeral and is unsuitable for a live event.
+1. Teams submit an opening allocation. Portfolios, cash, debt, and insurance carry forward.
+2. The admin opens the news sequence and releases one news flash per simulation year. Each release processes that year's salary, expenses, dividends, deposit maturities, and debt interest, and reveals the year's market prices to all teams.
+3. The admin starts the Wheel and triggers one team's digital spin at a time. Teams see the active spin live and each result after it lands; an outcome remains hidden until then. Outcomes are independently randomized for each team.
+4. Teams submit a reallocation after seeing the Wheel consequence.
+5. The admin closes the sub-round to open the next one. After the ninth sub-round, the admin publishes the final net-worth leaderboard.
+
+The admin controls each step at `/admin` after selecting Round 2. Teams sign in at `/team` to see their private portfolio, the shared news and market disclosures, Wheel progress, and their allocation form during the two allocation windows. The public leaderboard only shows Bloodlines results after the admin publishes them.
+
+The fictional `data/bloodlines-test-market.json` is for testing only. It uses deterministic `{ "start": number, "annualGrowth": number }` series, expanded to 80 annual values by the server. An event market file can instead provide exactly 80 positive values for each equity and fund under `prices.equities` and `prices.funds`, 80 values in `prices.gold`, and 80 values each for `household.salary` and `household.expenses`. It must also include `household.startingCash`. Keep actual event data in a private file and set `BLOODLINES_MARKET_FILE` to its path; never commit real market, household, or event data. Bloodlines state is stored separately in `.data/bloodlines.json` by default; set `BLOODLINES_STORE_FILE` to change it. The new simulation flow uses a different save schema from the earlier four-year version: back up the old file and move it aside before starting this version. As with Round 1, Render's free filesystem is ephemeral and is unsuitable for a live event.
 
 ## Before the event
 

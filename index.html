@@ -22,12 +22,9 @@
           <a class="nav-link" href="/team">TEAM PANEL</a>
           <a class="nav-link" href="/admin">ADMIN</a>
         </nav>
-        <div class="round-switcher" role="group" aria-label="Select event round">
-          <button type="button" data-round-select="1" aria-pressed="true">R1 · BANKING</button>
-          <button type="button" data-round-select="2" aria-pressed="false">R2 · BLOODLINES</button>
-        </div>
+        <div class="round-indicator" data-round-indicator aria-live="polite">R1 · BANKING</div>
       </header>
-      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> A four-year household investment simulation. Team allocations are available in the team panel; simulation controls are in the admin panel.</p>
+      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> An 80-year household investment simulation across nine sub-rounds. Team allocations are available in the team panel; simulation controls are in the admin panel.</p>
 
       <main>
         <section class="public-hero">
@@ -64,10 +61,14 @@
         </section>
         <section class="public-board-section" data-round-two>
           <div class="public-board-heading">
-            <div><p class="eyebrow"><span class="eyebrow-line"></span> FOUR-YEAR HOUSEHOLD RESULTS</p><h2>Bloodlines leaderboard</h2></div>
+            <div><p class="eyebrow"><span class="eyebrow-line"></span> 80-YEAR HOUSEHOLD RESULTS</p><h2>Bloodlines leaderboard</h2></div>
             <span class="live-indicator"><i></i> UPDATING LIVE</span>
           </div>
           <p id="bloodlines-public-status" class="public-board-note">Final scores appear here after the admin publishes the completed simulation.</p>
+          <section id="bloodlines-public-wheel" class="bloodlines-public-wheel" hidden aria-live="polite">
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> LIVE WHEEL</p><h3 id="bloodlines-public-wheel-heading"></h3></div><span id="bloodlines-public-wheel-current" class="live-indicator" hidden><i></i> SPINNING</span></div>
+            <div id="bloodlines-public-wheel-entries" class="bloodlines-wheel-board"></div>
+          </section>
           <div id="bloodlines-public-leaderboard" class="public-leaderboard" aria-live="polite"></div>
         </section>
       </main>

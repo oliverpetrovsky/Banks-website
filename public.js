@@ -63,14 +63,15 @@ async function refreshPublicBoard() {
 function renderBloodlinesResults(data) {
   const board = document.querySelector("#bloodlines-public-leaderboard");
   const status = document.querySelector("#bloodlines-public-status");
+  renderBloodlinesWheel(data);
   if (!data.published) {
-    status.textContent = data.yearComplete
-      ? "The simulation is complete. Final scores will appear after the admin publishes them."
-      : "Final scores appear here after the admin publishes the completed simulation.";
+    status.textContent = data.completed
+      ? "The 80-year simulation is complete. Final scores will appear after the admin publishes them."
+      : "Final scores appear here after the admin completes and publishes all nine sub-rounds.";
     board.replaceChildren();
     return;
   }
-  status.textContent = "Final household net worth after four simulated years.";
+  status.textContent = "Final household net worth after 80 simulated years.";
   if (!data.teams.length) {
     board.replaceChildren();
     return;
@@ -90,6 +91,33 @@ function renderBloodlinesResults(data) {
     score.className = "result-score";
     score.textContent = `NET WORTH ${formatRupees(team.score)}`;
     row.append(information, score);
+    return row;
+  }));
+}
+
+function renderBloodlinesWheel(data) {
+  const section = document.querySelector("#bloodlines-public-wheel");
+  const entries = data.wheel?.entries || [];
+  section.hidden = !data.wheel;
+  if (!data.wheel) return;
+  document.querySelector("#bloodlines-public-wheel-heading").textContent =
+    `Sub-round ${data.subround} / ${data.subrounds} · Years ${data.years.start}–${data.years.end}`;
+  const current = document.querySelector("#bloodlines-public-wheel-current");
+  current.hidden = !data.wheel.current;
+  current.lastChild.textContent = data.wheel.current ? ` ${data.wheel.current.team} SPINNING` : " SPINNING";
+  document.querySelector("#bloodlines-public-wheel-entries").replaceChildren(...entries.map((entry) => {
+    const row = document.createElement("div");
+    row.className = `bloodlines-wheel-entry${entry.status === "spinning" ? " is-spinning" : ""}`;
+    const spinner = document.createElement("span");
+    spinner.className = `wheel-spinner${entry.status === "spinning" ? " is-spinning" : ""}`;
+    spinner.setAttribute("aria-hidden", "true");
+    const name = document.createElement("strong");
+    name.textContent = entry.team;
+    const result = document.createElement("span");
+    result.textContent = entry.outcome
+      ? `${entry.outcome.name} · ${formatRupees(entry.outcome.effect)}`
+      : entry.status === "spinning" ? "SPINNING NOW" : entry.status.toUpperCase();
+    row.append(spinner, name, result);
     return row;
   }));
 }

@@ -1,17 +1,22 @@
 {
   "prices": {
     "equities": {
-      "TECH": [1260, 1185, 1390, 1475],
-      "AUTO": [835, 910, 870, 1030],
-      "HLTH": [985, 1045, 1110, 1060],
-      "AI": [490, 410, 560, 515],
-      "RET": [525, 500, 575, 620]
+      "TECH": { "start": 1200, "annualGrowth": 0.045 },
+      "AUTO": { "start": 800, "annualGrowth": 0.035 },
+      "HLTH": { "start": 950, "annualGrowth": 0.04 },
+      "AI": { "start": 450, "annualGrowth": 0.065 },
+      "RET": { "start": 500, "annualGrowth": 0.03 }
     },
     "funds": {
-      "fund-meridian": [103.5, 108.2, 114.1, 120.5],
-      "fund-ignis": [108.0, 97.4, 112.6, 105.3],
-      "fund-sentinel": [102.2, 106.8, 111.0, 116.7]
+      "fund-meridian": { "start": 100, "annualGrowth": 0.055 },
+      "fund-ignis": { "start": 100, "annualGrowth": 0.07 },
+      "fund-sentinel": { "start": 100, "annualGrowth": 0.04 }
     },
-    "gold": [6200, 6450, 6325, 6810]
+    "gold": { "start": 6000, "annualGrowth": 0.045 }
+  },
+  "household": {
+    "startingCash": 600000,
+    "salary": { "start": 900000, "annualGrowth": 0.05 },
+    "expenses": { "start": 650000, "annualGrowth": 0.04 }
   }
 }

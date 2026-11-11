@@ -17,12 +17,9 @@
         <nav class="site-nav" aria-label="Main navigation">
           <a class="nav-link" href="/">LEADERBOARD</a><a class="nav-link is-active" href="/team">TEAM PANEL</a><a class="nav-link" href="/admin">ADMIN</a>
         </nav>
-        <div class="round-switcher" role="group" aria-label="Select event round">
-          <button type="button" data-round-select="1" aria-pressed="true">R1 · BANKING</button>
-          <button type="button" data-round-select="2" aria-pressed="false">R2 · BLOODLINES</button>
-        </div>
+        <div class="round-indicator" data-round-indicator aria-live="polite">R1 · BANKING</div>
       </header>
-      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Guide a household through four years of investment decisions. Round 1 bidding is unavailable while this round is selected.</p>
+      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Guide a household through 80 years of investment decisions across nine sub-rounds. Round 1 bidding is unavailable while this round is selected.</p>
       <main class="panel-main team-main">
         <section class="panel-heading">
           <p class="eyebrow"><span class="eyebrow-line"></span> <span data-round-label>ROUND 01 / THE BANKING SYNDICATE</span></p>
@@ -48,17 +45,22 @@
             <div id="team-results" class="team-results"></div>
           </section>
           <section id="bloodlines-team-panel" class="bloodlines-panel" hidden>
-            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> ROUND 02 / HOUSEHOLD SIMULATION</p><h2 id="bloodlines-title">Waiting for the simulation</h2></div><span id="bloodlines-stage" class="auction-status-card">WAITING</span></div>
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> ROUND 02 / 80-YEAR HOUSEHOLD SIMULATION</p><h2 id="bloodlines-title">Waiting for the simulation</h2></div><span id="bloodlines-stage" class="auction-status-card">WAITING</span></div>
             <p id="bloodlines-instructions" class="public-board-note">Your household ledger and investment decisions will appear when the admin starts Bloodlines.</p>
+            <p id="bloodlines-coverage" class="public-board-note"></p>
             <div id="bloodlines-summary" class="bloodlines-summary"></div>
             <div id="bloodlines-news" class="bloodlines-news"></div>
-            <div id="bloodlines-wheel" class="bloodlines-wheel" hidden></div>
+            <div id="bloodlines-market" class="bloodlines-market" hidden></div>
+            <section id="bloodlines-wheel" class="bloodlines-wheel" hidden aria-live="polite">
+              <div class="bloodlines-wheel-status"><div id="bloodlines-wheel-spinner" class="wheel-spinner" aria-hidden="true"></div><p id="bloodlines-wheel-current"></p></div>
+              <ol id="bloodlines-wheel-entries" class="bloodlines-wheel-entries"></ol>
+            </section>
             <form id="bloodlines-allocation-form" class="bloodlines-allocation" hidden>
-              <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> STAGE 03 / TRADING WINDOW</p><h3>Build your allocation</h3></div></div>
-              <p class="public-board-note">Use the prices known at the start of this year. Trades are processed in the order shown; you may buy and sell an asset in one window.</p>
+              <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> ALLOCATION WINDOW</p><h3 id="bloodlines-allocation-heading">Build your allocation</h3></div></div>
+              <p class="public-board-note">Use prices revealed so far. Trades are processed in the order shown; you may buy and sell an asset in one window.</p>
               <button class="button button-ghost bloodlines-add-trade" id="bloodlines-add-trade" type="button">ADD TRADE LINE</button>
               <div class="bloodlines-trades-wrap"><table class="bloodlines-trades"><thead><tr><th>INSTRUMENT</th><th>KNOWN PRICE</th><th>ACTION</th><th>UNITS / ₹</th></tr></thead><tbody id="bloodlines-trades"></tbody></table></div>
-              <fieldset class="bloodlines-insurance"><legend>INSURANCE FOR THIS YEAR</legend><div id="bloodlines-insurance-options"></div></fieldset>
+              <fieldset class="bloodlines-insurance"><legend>INSURANCE COVER</legend><div id="bloodlines-insurance-options"></div></fieldset>
               <div class="button-row"><button class="button button-primary" type="submit">SAVE ALLOCATION</button><span id="bloodlines-cash-preview"></span></div>
               <p class="form-message" aria-live="polite"></p>
             </form>
