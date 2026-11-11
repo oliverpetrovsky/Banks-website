@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Test Team Alpha",
+    "accessCode": "TEST-ONLY-ALPHA-2026"
+  },
+  {
+    "name": "Test Team Bravo",
+    "accessCode": "TEST-ONLY-BRAVO-2026"
+  },
+  {
+    "name": "Test Team Charlie",
+    "accessCode": "TEST-ONLY-CHARLIE-2026"
+  }
+]

@@ -11,3 +11,5 @@ services:
         generateValue: true
       - key: COOKIE_SECURE
         value: "1"
+      - key: INITIAL_TEAMS_FILE
+        value: data/test-teams.json

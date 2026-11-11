@@ -76,5 +76,31 @@
     "principalRequired": 240000,
     "minimumFundingRatio": 0.7,
     "maximumRate": 19
+  },
+  {
+    "id": "T3-01",
+    "era": "ERA_3",
+    "eraName": "Test Era Three",
+    "decade": "TEST",
+    "name": "Juniper Materials",
+    "sector": "Test Company · Advanced Materials",
+    "summary": "A fictional materials company seeking capital to scale a low-waste manufacturing process.",
+    "winnerBriefing": "Juniper Materials has completed a small production trial with a local manufacturer. Scaling the process depends on equipment installation and meeting quality targets across multiple batches.",
+    "principalRequired": 210000,
+    "minimumFundingRatio": 0.7,
+    "maximumRate": 16
+  },
+  {
+    "id": "T3-02",
+    "era": "ERA_3",
+    "eraName": "Test Era Three",
+    "decade": "TEST",
+    "name": "Silverline Logistics",
+    "sector": "Test Company · Logistics",
+    "summary": "A fictional logistics business seeking financing for a regional warehouse and delivery network.",
+    "winnerBriefing": "Silverline Logistics has identified a warehouse site and received preliminary interest from local retailers. Lease approval and hiring a reliable operations team are the next major milestones.",
+    "principalRequired": 190000,
+    "minimumFundingRatio": 0.65,
+    "maximumRate": 15
   }
 ]

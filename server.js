@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const ROOT = __dirname;
 const DATA_FILE = process.env.COMPANIES_FILE || path.join(ROOT, "data", "test.json");
+const INITIAL_TEAMS_FILE = process.env.INITIAL_TEAMS_FILE;
 const STORE_FILE = process.env.BIDS_FILE || path.join(ROOT, ".data", "bids.json");
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -32,29 +33,89 @@ if (!Array.isArray(companies) || companies.length === 0) {
   process.exit(1);
 }
 
-function readStore() {
+function loadInitialTeams() {
+  if (!INITIAL_TEAMS_FILE) return [];
+  const file = path.resolve(ROOT, INITIAL_TEAMS_FILE);
+  let entries;
   try {
-    const stored = JSON.parse(fs.readFileSync(STORE_FILE, "utf8"));
-    if (!Array.isArray(stored.bids)) throw new Error("Bids data must be an array.");
+    entries = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`Unable to load initial teams from ${file}: ${error.message}`);
+  }
+  if (!Array.isArray(entries)) {
+    throw new Error(`Initial teams file ${file} must contain a JSON array.`);
+  }
+
+  const names = new Set();
+  return entries.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`Initial teams file ${file}: team ${index + 1} must be an object.`);
+    }
+    const name = typeof entry.name === "string" ? entry.name.trim().replace(/\s+/g, " ") : "";
+    const accessCode = typeof entry.accessCode === "string" ? entry.accessCode.trim() : "";
+    const key = name.toLocaleLowerCase("en");
+    if (!/^[\p{L}\p{N}][\p{L}\p{N} '&.-]{1,34}$/u.test(name)) {
+      throw new Error(`Initial teams file ${file}: team ${index + 1} needs a name between 2 and 35 characters.`);
+    }
+    if (!accessCode || accessCode.length < 12) {
+      throw new Error(`Initial teams file ${file}: team ${name} needs an access code of at least 12 characters.`);
+    }
+    if (names.has(key)) {
+      throw new Error(`Initial teams file ${file}: duplicate team name "${name}".`);
+    }
+    names.add(key);
+    const salt = crypto.randomBytes(16).toString("hex");
     return {
-      bids: stored.bids,
-      teams: Array.isArray(stored.teams) ? stored.teams : [],
-      results: stored.results && typeof stored.results === "object" ? stored.results : {},
-      auction: stored.auction && typeof stored.auction === "object"
-        ? stored.auction
-        : { status: "waiting", era: null, companyId: null }
+      name,
+      key,
+      salt,
+      codeHash: crypto.scryptSync(accessCode, salt, 64).toString("hex"),
+      createdAt: new Date().toISOString()
     };
+  });
+}
+
+const initialTeams = loadInitialTeams();
+
+function readStore() {
+  let stored;
+  try {
+    stored = JSON.parse(fs.readFileSync(STORE_FILE, "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") {
-      return {
+      const store = {
         bids: [],
-        teams: [],
+        teams: [...initialTeams],
         results: {},
+        initialTeamsSeeded: initialTeams.length > 0,
         auction: { status: "waiting", era: null, companyId: null }
       };
+      if (initialTeams.length) writeStore(store);
+      return store;
     }
     throw error;
   }
+  if (!Array.isArray(stored.bids)) throw new Error("Bids data must be an array.");
+  const store = {
+    bids: stored.bids,
+    teams: Array.isArray(stored.teams) ? stored.teams : [],
+    results: stored.results && typeof stored.results === "object" ? stored.results : {},
+    initialTeamsSeeded: stored.initialTeamsSeeded === true,
+    auction: stored.auction && typeof stored.auction === "object"
+      ? stored.auction
+      : { status: "waiting", era: null, companyId: null }
+  };
+  if (initialTeams.length && !store.initialTeamsSeeded) {
+    const existingKeys = new Set(store.teams.map((team) => team.key));
+    const conflicts = initialTeams.filter((team) => existingKeys.has(team.key));
+    if (conflicts.length) {
+      throw new Error(`Cannot seed initial teams because these names already exist: ${conflicts.map((team) => team.name).join(", ")}. Rename them in the initial teams file.`);
+    }
+    store.teams.push(...initialTeams);
+    store.initialTeamsSeeded = true;
+    writeStore(store);
+  }
+  return store;
 }
 
 function writeStore(store) {
@@ -501,11 +562,11 @@ async function handle(request, response) {
       bid.era === company.era && bid.companyId === company.id && bid.teamKey === session.teamKey
     );
     const committed = store.bids.reduce((sum, bid, index) => {
-      if (bid.era !== company.era || bid.teamKey !== session.teamKey || index === existingIndex) return sum;
+      if (bid.teamKey !== session.teamKey || index === existingIndex) return sum;
       return sum + bid.principal;
     }, 0);
     if (committed + principal > VAULT_CAPITAL) {
-      return sendError(response, 400, `This offer would exceed your ${VAULT_CAPITAL.toLocaleString("en-IN")} rupee vault for this era.`);
+      return sendError(response, 400, `This offer would exceed your total ${VAULT_CAPITAL.toLocaleString("en-IN")} rupee team vault across all eras.`);
     }
     const bid = {
       era: company.era,

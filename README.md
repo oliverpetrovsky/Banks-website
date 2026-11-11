@@ -4,11 +4,21 @@ Banks & Bloodlines is a finance strategy event conducted by E-Cell at SYNERGY, t
 
 The app loads fictional companies from `data/test.json` by default. Event-specific company data is intentionally excluded from the public repository. When the approved event dataset is ready, keep it in a private local file and select it with `COMPANIES_FILE`.
 
+For initial team accounts, place a private file at `data/initial-teams.json` and set `INITIAL_TEAMS_FILE=data/initial-teams.json`. It is ignored by Git. The file must contain a JSON array with `name` and `accessCode` for each team. Access codes must be at least 12 characters:
+
+```json
+[
+  { "name": "Team Alpha", "accessCode": "a-private-code-at-least-12-characters" }
+]
+```
+
+The server hashes each code and seeds the accounts into `.data/bids.json` once; later file edits do not reset existing accounts. The Render test Blueprint uses `data/test-teams.json`, which contains public dummy credentials for three test teams. Never put real team access codes in a public repository or use the test credentials for an event.
+
 ## Deploy a test instance on Render
 
 1. Push this repository to GitHub. Confirm `data/companies.json` is not tracked; the Render Blueprint uses only the fictional `data/test.json`.
 2. In Render, choose **New → Blueprint**, connect `oliverpetrovsky/Banks-website`, and deploy the `render.yaml` Blueprint.
-3. Render generates a private `ADMIN_PASSWORD` and enables secure session cookies. Find the generated password in the service's environment settings, then use `/admin` to set up test teams.
+3. Render generates a private `ADMIN_PASSWORD`, enables secure session cookies, and seeds three dummy test teams. Find the admin password in the service's environment settings; test team names and access codes are listed in `data/test-teams.json`.
 4. Open the deployed service URL. The public page is `/`, the team panel is `/team`, and administration is `/admin`.
 
 The Blueprint uses Render's free instance for testing. Its local JSON store is ephemeral: team accounts, bids, and auction state can be lost when Render restarts or redeploys the service. Admin and team sessions also expire on restarts. Do not use this deployment for a live event or real company data. Persistent storage requires a paid Render disk or replacing the JSON store with a managed database.
@@ -34,7 +44,7 @@ Open `http://localhost:3000`. The public leaderboard only shows results after an
 
 ## Round 1 rules implemented
 
-- Each team has a separate ₹6,00,000 vault for each era.
+- Each team has one ₹6,00,000 vault total, shared across all three eras.
 - The maximum offer for a single company is ₹2,50,000.
 - Principal is submitted in ₹10,000 increments, at or above the company's minimum funding floor.
 - Interest is submitted in 0.5% increments, no higher than the company's maximum rate.
