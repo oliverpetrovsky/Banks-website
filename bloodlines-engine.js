@@ -143,10 +143,12 @@ function writeStore(state) {
 }
 
 function ensureRegisteredTeams(state, teams) {
-  for (const team of teams) {
-    if (!state.teams[team.key]) state.teams[team.key] = newTeam(team);
-    if (!state.teamOrder.includes(team.key)) state.teamOrder.push(team.key);
-  }
+  const eligibleTeams = teams.map((team) => [
+    team.key,
+    state.teams[team.key] || newTeam(team)
+  ]);
+  state.teamOrder = eligibleTeams.map(([key]) => key);
+  state.teams = Object.fromEntries(eligibleTeams);
 }
 
 function validateSchedule(schedule) {
@@ -659,7 +661,18 @@ async function handle(request, res, pathname, session, registeredTeams = []) {
     sendJson(res, 503, { error: error.message });
     return true;
   }
+  if (!publicScoreboard && !state.started) {
+    ensureRegisteredTeams(state, registeredTeams);
+    writeStore(state);
+  }
   if (state.currentSpin && completeSpin(state, market)) writeStore(state);
+  const eligibleKeys = new Set(registeredTeams.map((team) => team.key));
+  if (state.started && !publicScoreboard
+      && (state.teamOrder.some((key) => !eligibleKeys.has(key))
+        || registeredTeams.some((team) => !state.teams[team.key]))) {
+    sendJson(res, 409, { error: "Bloodlines was started with a different team roster. Reset its saved game before starting the qualified roster." });
+    return true;
+  }
   if (publicScoreboard) {
     const showWheel = ["wheel", "reallocation", "complete"].includes(state.activeStage);
     const result = {
@@ -671,31 +684,52 @@ async function handle(request, res, pathname, session, registeredTeams = []) {
       years: state.schedule[state.activeSubround - 1],
       stage: state.activeStage,
       wheel: showWheel ? {
-        entries: wheelEntries(state).map(({ teamKey, team, status, outcome }) => ({
-          team: state.teams[teamKey]?.name || team,
-          status,
-          outcome
-        })),
-        current: state.currentSpin ? { team: state.teams[state.currentSpin.teamKey].name } : null
+        entries: wheelEntries(state).filter(({ teamKey }) => eligibleKeys.has(teamKey))
+          .map(({ teamKey, team, status, outcome }) => ({
+            team: state.teams[teamKey]?.name || team,
+            status,
+            outcome
+          })),
+        current: state.currentSpin && eligibleKeys.has(state.currentSpin.teamKey)
+          ? { team: state.teams[state.currentSpin.teamKey].name }
+          : null
       } : null,
       teams: state.published
-        ? state.teamOrder.map((key) => ({ team: state.teams[key].name, score: Math.round(netWorth(state.teams[key], market) * 100) / 100 })).sort((a, b) => b.score - a.score)
+        ? state.teamOrder.filter((key) => eligibleKeys.has(key))
+          .map((key) => ({ team: state.teams[key].name, score: Math.round(netWorth(state.teams[key], market) * 100) / 100 }))
+          .sort((a, b) => b.score - a.score)
         : []
     };
     sendJson(res, 200, result);
     return true;
   }
   if (pathname === "/api/bloodlines/state" && request.method === "GET") {
-    if (session.role !== "participant" || !state.teams[session.teamKey]) {
+    if (session.role !== "participant") {
       sendJson(res, 403, { error: "Sign in with a registered team account to access Bloodlines." });
+      return true;
+    }
+    if (!eligibleKeys.has(session.teamKey)) {
+      sendJson(res, 403, { error: "This team was not selected to advance to Bloodlines." });
+      return true;
+    }
+    if (!state.teams[session.teamKey]) {
+      sendJson(res, 403, { error: "This team is not registered in the Bloodlines game." });
       return true;
     }
     sendJson(res, 200, publicState(state, session.teamKey, market));
     return true;
   }
   if (pathname === "/api/bloodlines/allocation" && request.method === "POST") {
-    if (session.role !== "participant" || !state.teams[session.teamKey]) {
+    if (session.role !== "participant") {
       sendJson(res, 403, { error: "Only registered team accounts can submit allocations." });
+      return true;
+    }
+    if (!eligibleKeys.has(session.teamKey)) {
+      sendJson(res, 403, { error: "This team was not selected to advance to Bloodlines." });
+      return true;
+    }
+    if (!state.teams[session.teamKey]) {
+      sendJson(res, 403, { error: "This team is not registered in the Bloodlines game." });
       return true;
     }
     const initial = state.activeStage === "allocation";

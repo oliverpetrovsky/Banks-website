@@ -211,6 +211,12 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .banking-settlement-result { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--smoke); font-size: 9px; }
 .banking-settlement-rows { margin-top: 7px; display: grid; gap: 3px; }
 .banking-settlement-rows p { margin: 0; }
+.round-one-qualifier-list { margin: 12px 0; display: grid; gap: 5px; overflow-x: auto; }
+.round-one-qualifier-row { min-width: 860px; padding: 9px; display: grid; grid-template-columns: 20px 30px minmax(120px, 1.4fr) repeat(3, minmax(105px, .9fr)) minmax(150px, 1fr); align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 4px; background: #141413; }
+.round-one-qualifier-row input { accent-color: var(--yellow); }
+.round-one-qualifier-row > strong:first-of-type, .round-one-qualifier-row > span { color: var(--smoke); font: 7px/1.5 var(--mono); }
+.round-one-qualifier-row > strong:nth-of-type(2) { color: var(--ink); font-size: 9px; }
+.round-one-qualifier-row b { color: var(--yellow); font: 8px/1.5 var(--mono); }
 .banking-account { margin-top: 12px; }
 .banking-account-balance { color: var(--yellow); font: 15px var(--mono); }
 .banking-account-portfolio { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 7px; }

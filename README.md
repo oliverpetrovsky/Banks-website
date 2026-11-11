@@ -48,6 +48,8 @@ Open `http://localhost:3000`. The public leaderboard only shows results after an
 5. Only the active company is sent to participants. Upcoming company details are served only to signed-in admins.
 6. Decade settlement calculates each awarded company's NPI and any interest due, and credits 6% annual compound growth on uninvested cash. At decade ten, principal is returned according to the final NPI tier and all company positions for that era are cleared.
 7. The public leaderboard shows closed auction winners and BVI. The winning team can read the company's additional briefing in its team panel.
+8. After all three eras are complete, the admin reviews the Round 1 qualification preview in `/admin`, selects the teams advancing, and locks the list. The ranking is current settled cash plus remaining scheduled payments on active loans owed to the team, minus remaining scheduled payments the team owes. Defaulted loan balances are excluded. This is a projection only; it does not transfer money or change active loan balances. Requests not finally approved expire when Round 1 closes. Round 2 remains unavailable until at least one team is selected. Team registration closes when the list is locked.
+9. Bloodlines uses its configured starting cash for every qualifier; Round 1 balances are not carried into the household simulation. Only selected teams can access Bloodlines.
 
 ## Round 1 rules implemented
 

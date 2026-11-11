@@ -99,6 +99,7 @@ function readStore() {
         initialTeamsSeeded: initialTeams.length > 0,
         auction: { status: "waiting", era: null, companyId: null },
         activeRound: 1,
+        roundOneCloseout: null,
         banking: null,
         loans: []
       };
@@ -118,6 +119,9 @@ function readStore() {
       ? stored.auction
       : { status: "waiting", era: null, companyId: null },
     activeRound: stored.activeRound === 2 ? 2 : 1,
+    roundOneCloseout: stored.roundOneCloseout && typeof stored.roundOneCloseout === "object"
+      ? stored.roundOneCloseout
+      : null,
     banking: stored.banking && typeof stored.banking === "object" ? stored.banking : null,
     loans: Array.isArray(stored.loans) ? stored.loans : []
   };
@@ -294,6 +298,67 @@ function positionFor(store, teamKey, era, companyId) {
 function activeLoansFor(store, teamKey) {
   return store.loans.filter((loan) => loan.status === "active"
     && (loan.borrowerKey === teamKey || loan.lenderKey === teamKey));
+}
+
+function remainingScheduledLoanValue(loan) {
+  let outstandingPrincipal = loan.outstandingPrincipal;
+  const remainingInstallments = Math.max(0, loan.termYears - (loan.paidInstallments || 0));
+  let total = 0;
+  for (let index = 0; index < remainingInstallments; index += 1) {
+    const interest = loan.interestType === "simple"
+      ? Math.round(loan.principal * loan.ratePercent / 100)
+      : Math.round(outstandingPrincipal * loan.ratePercent / 100);
+    const scheduledPayment = loan.interestType === "simple"
+      ? Math.round(loan.principal / loan.termYears) + interest
+      : loan.annualPayment;
+    const principalDue = Math.min(outstandingPrincipal, scheduledPayment - interest);
+    total += interest + principalDue;
+    outstandingPrincipal -= principalDue;
+  }
+  return total;
+}
+
+function roundOnePerformance(store) {
+  const teams = new Map(store.teams.map((team) => {
+    const account = store.banking.accounts[team.key];
+    if (!account) throw new Error(`The Round 1 cash account for ${team.name} is missing.`);
+    return [team.key, {
+      teamKey: team.key,
+      team: team.name,
+      cash: account.balance,
+      projectedCredits: 0,
+      projectedDebts: 0
+    }];
+  }));
+  for (const loan of store.loans) {
+    if (loan.status !== "active") continue;
+    const borrower = teams.get(loan.borrowerKey);
+    const lender = teams.get(loan.lenderKey);
+    if (!borrower || !lender) {
+      throw new Error(`Active loan ${loan.id} refers to a team that is no longer registered.`);
+    }
+    const remaining = remainingScheduledLoanValue(loan);
+    borrower.projectedDebts += remaining;
+    lender.projectedCredits += remaining;
+  }
+  return [...teams.values()]
+    .map((team) => ({
+      ...team,
+      projectedNet: team.cash + team.projectedCredits - team.projectedDebts
+    }))
+    .sort((a, b) => b.projectedNet - a.projectedNet
+      || b.cash - a.cash
+      || a.team.localeCompare(b.team));
+}
+
+function roundOneCloseoutError(store) {
+  if (!store.banking.complete) return "Complete all Round 1 eras and decade settlements first.";
+  if (store.auction.status === "open") return "Close the active company auction before ending Round 1.";
+  if (store.teams.length === 0) return "Register at least one team before ending Round 1.";
+  if (store.teams.some((team) => (store.banking.accounts[team.key]?.portfolio || []).length > 0)) {
+    return "Settle all Round 1 company positions before ending the round.";
+  }
+  return null;
 }
 
 function outstandingLendingFor(store, teamKey) {
@@ -1173,6 +1238,9 @@ async function handle(request, response) {
       return sendError(response, 400, "Choose Round 1 or Round 2.");
     }
     const store = readStore();
+    if (body.round === 2 && !store.roundOneCloseout?.qualifierKeys?.length) {
+      return sendError(response, 409, "End Round 1 and lock at least one qualifying team before starting Bloodlines.");
+    }
     store.activeRound = body.round;
     writeStore(store);
     return sendJson(response, 200, { round: store.activeRound });
@@ -1490,6 +1558,67 @@ async function handle(request, response) {
       });
     }
 
+    if (request.method === "GET" && pathname === "/api/admin/round-one/qualification") {
+      const store = readStore();
+      const reason = roundOneCloseoutError(store);
+      const closeout = store.roundOneCloseout;
+      return sendJson(response, 200, {
+        available: Boolean(closeout) || !reason,
+        canClose: !closeout && !reason,
+        reason: closeout ? null : reason,
+        locked: Boolean(closeout),
+        closedAt: closeout?.closedAt || null,
+        qualifierKeys: closeout?.qualifierKeys || [],
+        rankings: closeout?.rankings || (reason ? [] : roundOnePerformance(store))
+      });
+    }
+
+    if (request.method === "POST" && pathname === "/api/admin/round-one/close") {
+      const body = await readJson(request);
+      if (!body || typeof body !== "object" || Array.isArray(body)
+          || !Array.isArray(body.qualifierKeys)) {
+        return sendError(response, 400, "Select at least one team to qualify for Bloodlines.");
+      }
+      const store = readStore();
+      const reason = roundOneCloseoutError(store);
+      if (reason) return sendError(response, 409, reason);
+      if (store.roundOneCloseout) {
+        return sendError(response, 409, "Round 1 has already been closed and its qualifier list is locked.");
+      }
+      if (store.activeRound !== 1) {
+        return sendError(response, 409, "Switch back to Round 1 before closing it.");
+      }
+      const uniqueKeys = new Set(body.qualifierKeys);
+      if (uniqueKeys.size !== body.qualifierKeys.length || uniqueKeys.size === 0
+          || [...uniqueKeys].some((key) => typeof key !== "string"
+            || !store.teams.some((team) => team.key === key))) {
+        return sendError(response, 400, "Choose one or more registered teams from the performance list.");
+      }
+      const rankings = roundOnePerformance(store);
+      const selectedKeys = rankings
+        .filter((team) => uniqueKeys.has(team.teamKey))
+        .map((team) => team.teamKey);
+      const closedAt = new Date().toISOString();
+      for (const loan of store.loans) {
+        if (loan.status === "pending_lender" || loan.status === "pending_admin") {
+          loan.status = "expired_at_round_end";
+          loan.closedAt = closedAt;
+        }
+      }
+      store.roundOneCloseout = {
+        closedAt,
+        qualifierKeys: selectedKeys,
+        rankings
+      };
+      writeStore(store);
+      return sendJson(response, 200, {
+        locked: true,
+        closedAt: store.roundOneCloseout.closedAt,
+        qualifierKeys: selectedKeys,
+        rankings
+      });
+    }
+
     if (request.method === "GET" && pathname === "/api/admin/banking") {
       const store = readStore();
       const current = currentBankingGroup(store);
@@ -1597,6 +1726,9 @@ async function handle(request, response) {
         return sendError(response, 400, "Enter a team name between 2 and 35 characters.");
       }
       const store = readStore();
+      if (store.roundOneCloseout) {
+        return sendError(response, 409, "Team registration is closed because the Round 1 qualifier list is locked.");
+      }
       const key = name.toLocaleLowerCase("en");
       if (store.teams.some((team) => team.key === key)) {
         return sendError(response, 409, "A team with that name already exists.");
@@ -1672,7 +1804,17 @@ async function handle(request, response) {
   if (pathname.startsWith("/api/bloodlines/")) {
     const session = getSession(request);
     const store = readStore();
-    return bloodlines.handle(request, response, pathname, session, store.teams);
+    const publicScoreboard = pathname === "/api/bloodlines/public-scoreboard"
+      && request.method === "GET";
+    if (!publicScoreboard && store.activeRound !== 2) {
+      return sendError(response, 409, "Bloodlines is not active. The admin must close Round 1 and select Round 2.");
+    }
+    if (!publicScoreboard && !store.roundOneCloseout?.qualifierKeys?.length) {
+      return sendError(response, 409, "Round 1 qualifiers have not been selected.");
+    }
+    const qualifierKeys = new Set(store.roundOneCloseout?.qualifierKeys || []);
+    const eligibleTeams = store.teams.filter((team) => qualifierKeys.has(team.key));
+    return bloodlines.handle(request, response, pathname, session, eligibleTeams);
   }
   return sendError(response, 404, "Page not found.");
 }

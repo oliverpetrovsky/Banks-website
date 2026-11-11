@@ -65,11 +65,34 @@ async function refreshAdminAuthorization() {
   if (!document.querySelector("#admin-round-switcher")) return;
   try {
     const session = await fetchJson("/api/auth/session");
-    setAdminAuthorization(session.authenticated && session.role === "admin");
+    const authorized = session.authenticated && session.role === "admin";
+    setAdminAuthorization(authorized);
+    if (authorized) await refreshRoundAccess();
   } catch (error) {
     setAdminAuthorization(false);
     const message = document.querySelector("#admin-round-message");
     if (message) message.textContent = error.message;
+  }
+}
+
+async function refreshRoundAccess() {
+  const switcher = document.querySelector("#admin-round-switcher");
+  if (!switcher || !adminAuthorized) return;
+  const roundTwoButton = switcher.querySelector('[data-round-select="2"]');
+  const message = document.querySelector("#admin-round-message");
+  try {
+    const qualification = await fetchJson("/api/admin/round-one/qualification");
+    roundTwoButton.disabled = roundRequestPending || !qualification.locked;
+    if (!qualification.locked) {
+      message.textContent = qualification.available
+        ? "Select and lock Round 1 qualifiers to enable Bloodlines."
+        : "Complete Round 1 and lock qualifiers to enable Bloodlines.";
+    } else if (message.textContent.includes("qualifier")) {
+      message.textContent = "";
+    }
+  } catch (error) {
+    roundTwoButton.disabled = true;
+    message.textContent = error.message;
   }
 }
 
@@ -93,6 +116,7 @@ async function changeRound(event) {
   } finally {
     roundRequestPending = false;
     setAdminAuthorization(adminAuthorized);
+    if (adminAuthorized) await refreshRoundAccess();
   }
 }
 

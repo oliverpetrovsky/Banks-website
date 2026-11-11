@@ -2,6 +2,8 @@ const adminState = {
   data: null,
   banking: null,
   loans: [],
+  qualification: null,
+  qualificationSelection: new Set(),
   poll: null,
   editingSelection: false,
   authenticated: false,
@@ -387,26 +389,87 @@ function renderStandings(auction, board) {
   target.replaceChildren(table);
 }
 
+function renderRoundOneQualification(state) {
+  const status = document.querySelector("#round-one-closeout-status");
+  const message = document.querySelector("#round-one-closeout-message");
+  const list = document.querySelector("#round-one-qualifier-list");
+  const closeButton = document.querySelector("#round-one-closeout-submit");
+  const qualifierInputs = [...list.querySelectorAll("[data-qualifier-key]")];
+  if (!state.locked && qualifierInputs.length) {
+    adminState.qualificationSelection = new Set(
+      qualifierInputs.filter((input) => input.checked)
+        .map((input) => input.dataset.qualifierKey)
+    );
+  }
+  if (state.locked) {
+    adminState.qualificationSelection = new Set(state.qualifierKeys);
+    status.textContent = "CLOSED";
+    message.textContent = `Qualifier list locked ${new Date(state.closedAt).toLocaleString()}. Bloodlines will use its configured starting cash; Round 1 balances are not transferred.`;
+    closeButton.disabled = true;
+    closeButton.textContent = "ROUND 1 CLOSED";
+  } else {
+    status.textContent = state.available ? "READY TO CLOSE" : "IN PROGRESS";
+    message.textContent = state.available
+      ? "Select the teams that advance. Ranking adds current Round 1 cash and remaining scheduled loan credits, then subtracts remaining scheduled loan payments. This preview does not transfer money. Defaulted loans are excluded; requests not finally approved expire when Round 1 closes."
+      : state.reason || "Complete all Round 1 eras and decade settlements first.";
+    closeButton.disabled = !state.canClose || adminState.qualificationSelection.size === 0;
+  }
+  document.querySelectorAll("#team-create-form input, #team-create-form button")
+    .forEach((control) => { control.disabled = state.locked; });
+  list.replaceChildren(...state.rankings.map((team, index) => {
+    const row = document.createElement("label");
+    row.className = "round-one-qualifier-row";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.qualifierKey = team.teamKey;
+    checkbox.checked = adminState.qualificationSelection.has(team.teamKey);
+    checkbox.disabled = state.locked || !state.canClose;
+    const rank = document.createElement("strong");
+    rank.textContent = String(index + 1).padStart(2, "0");
+    const name = document.createElement("strong");
+    name.textContent = team.team;
+    const cash = document.createElement("span");
+    cash.textContent = `CASH ${formatRupees(team.cash)}`;
+    const credit = document.createElement("span");
+    credit.textContent = `CREDIT ${formatRupees(team.projectedCredits)}`;
+    const debt = document.createElement("span");
+    debt.textContent = `DEBT ${formatRupees(team.projectedDebts)}`;
+    const net = document.createElement("b");
+    net.textContent = `PROJECTED ${formatRupees(team.projectedNet)}`;
+    row.append(checkbox, rank, name, cash, credit, debt, net);
+    return row;
+  }));
+  if (!state.rankings.length && !state.locked) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "The performance list will appear when Round 1 is complete.";
+    list.replaceChildren(empty);
+  }
+}
+
 async function refreshDashboard() {
   try {
     if (document.body.dataset.round === "2") {
       await refreshBloodlines();
       return;
     }
-    const [banking, auction, teamData, loanData] = await Promise.all([
+    const [banking, auction, teamData, loanData, qualification] = await Promise.all([
       api("/api/admin/banking"),
       api("/api/auction"),
       api("/api/admin/teams"),
-      api("/api/admin/loans")
+      api("/api/admin/loans"),
+      api("/api/admin/round-one/qualification")
     ]);
     adminState.banking = banking;
     adminState.loans = loanData.loans;
+    adminState.qualification = qualification;
     const eraSelect = document.querySelector("#auction-control-form").elements.era;
     if (banking.current && eraSelect.value !== banking.current.era) {
       eraSelect.value = banking.current.era;
     }
     refreshCompanySelect();
     renderBankingProgress(banking, auction.status);
+    renderRoundOneQualification(qualification);
     renderAdminLoans(loanData.loans);
     renderStandings(auction, teamData);
   } catch (error) {
@@ -672,6 +735,26 @@ async function settleBankingDecade() {
   }
 }
 
+async function closeRoundOne() {
+  const button = document.querySelector("#round-one-closeout-submit");
+  if (!adminState.qualificationSelection.size
+      || !window.confirm("End Round 1 and permanently lock this Bloodlines qualifier list?")) return;
+  button.disabled = true;
+  try {
+    await api("/api/admin/round-one/close", {
+      method: "POST",
+      body: JSON.stringify({ qualifierKeys: [...adminState.qualificationSelection] })
+    });
+    await refreshDashboard();
+    showToast("Round 1 closed; Bloodlines qualifiers are locked.");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = !adminState.qualification?.canClose
+      || adminState.qualificationSelection.size === 0;
+  }
+}
+
 async function decideLoanAsAdmin(event) {
   const button = event.target.closest("[data-admin-loan-decision]");
   if (!button) return;
@@ -701,6 +784,15 @@ async function initialize() {
   document.querySelector("#close-auction").addEventListener("click", closeAuction);
   document.querySelector("#admin-refresh").addEventListener("click", refreshDashboard);
   document.querySelector("#banking-settle-decade").addEventListener("click", settleBankingDecade);
+  document.querySelector("#round-one-closeout-submit").addEventListener("click", closeRoundOne);
+  document.querySelector("#round-one-qualifier-list").addEventListener("change", (event) => {
+    if (!event.target.matches("[data-qualifier-key]")) return;
+    const key = event.target.dataset.qualifierKey;
+    if (event.target.checked) adminState.qualificationSelection.add(key);
+    else adminState.qualificationSelection.delete(key);
+    document.querySelector("#round-one-closeout-submit").disabled =
+      !adminState.qualification?.canClose || adminState.qualificationSelection.size === 0;
+  });
   document.querySelector("#admin-loans-refresh").addEventListener("click", refreshDashboard);
   document.querySelector("#admin-loan-list").addEventListener("click", decideLoanAsAdmin);
   document.querySelector("#admin-logout").addEventListener("click", logout);
