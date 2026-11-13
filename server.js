@@ -1423,6 +1423,9 @@ async function handle(request, response) {
     const session = requireRole(request, response, "participant");
     if (!session) return;
     const store = readStore();
+    if (store.activeRound !== 1) {
+      return sendError(response, 409, "Inter-team loans are unavailable during Bloodlines.");
+    }
     const account = store.banking.accounts[session.teamKey];
     return sendJson(response, 200, {
       loans: store.loans
@@ -1483,11 +1486,14 @@ async function handle(request, response) {
   if (lenderDecisionMatch && request.method === "POST") {
     const session = requireRole(request, response, "participant");
     if (!session) return;
+    const store = readStore();
+    if (store.activeRound !== 1) {
+      return sendError(response, 409, "Inter-team loans are unavailable during Bloodlines.");
+    }
     const body = await readJson(request);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return sendError(response, 400, "Submit a valid lender decision.");
     }
-    const store = readStore();
     const loan = store.loans.find((item) => item.id === lenderDecisionMatch[1]);
     if (!loan || loan.lenderKey !== session.teamKey) {
       return sendError(response, 404, "That incoming loan request was not found.");
@@ -1765,6 +1771,9 @@ async function handle(request, response) {
 
     if (request.method === "GET" && pathname === "/api/admin/loans") {
       const store = readStore();
+      if (store.activeRound !== 1) {
+        return sendError(response, 409, "Inter-team loans are unavailable during Bloodlines.");
+      }
       return sendJson(response, 200, {
         loans: store.loans.map((loan) => sanitizeLoan(loan, "admin")).reverse(),
         teams: store.teams.map((team) => ({
@@ -1782,11 +1791,14 @@ async function handle(request, response) {
 
     const adminLoanDecisionMatch = pathname.match(/^\/api\/admin\/loans\/([^/]+)\/decision$/);
     if (adminLoanDecisionMatch && request.method === "POST") {
+      const store = readStore();
+      if (store.activeRound !== 1) {
+        return sendError(response, 409, "Inter-team loans are unavailable during Bloodlines.");
+      }
       const body = await readJson(request);
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         return sendError(response, 400, "Submit a valid admin decision.");
       }
-      const store = readStore();
       const loan = store.loans.find((item) => item.id === adminLoanDecisionMatch[1]);
       if (!loan || loan.status !== "pending_admin") {
         return sendError(response, 404, "That lender-accepted loan request is not awaiting admin review.");

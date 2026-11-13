@@ -5,15 +5,15 @@ const path = require("node:path");
 const ROOT = __dirname;
 const STORE_FILE = process.env.BLOODLINES_STORE_FILE || path.join(ROOT, ".data", "bloodlines.json");
 const MARKET_FILE = process.env.BLOODLINES_MARKET_FILE || path.join(ROOT, "data", "bloodlines-test-market.json");
-const SCHEMA_VERSION = 2;
-const SIMULATION_YEARS = 80;
-const SUBROUNDS = 9;
+const SCHEMA_VERSION = 3;
+const SIMULATION_YEARS = 60;
+const SUBROUNDS = 6;
 const MAX_BODY_BYTES = 16 * 1024;
 const SPIN_DURATION_MS = 3200;
 const STAGES = ["allocation", "news", "wheel", "reallocation", "complete"];
 const DEFAULT_SCHEDULE = Array.from({ length: SUBROUNDS }, (_, index) => {
-  const start = index * 9 + 1;
-  return { start, end: index === SUBROUNDS - 1 ? SIMULATION_YEARS : start + 8 };
+  const start = index * 10 + 1;
+  return { start, end: start + 9 };
 });
 
 const INSTRUMENTS = [
@@ -109,13 +109,13 @@ function readMarket() {
     const expandSeries = (series) => {
       if (Array.isArray(series)) {
         if (series.length !== SIMULATION_YEARS || series.some((value) => !Number.isFinite(value) || value <= 0)) {
-          throw new Error("Every explicit annual series must contain 80 positive values.");
+          throw new Error(`Every explicit annual series must contain ${SIMULATION_YEARS} positive values.`);
         }
         return series;
       }
       if (!series || !Number.isFinite(series.start) || series.start <= 0
           || !Number.isFinite(series.annualGrowth) || series.annualGrowth <= -1) {
-        throw new Error("Each series must be 80 positive values or a valid { start, annualGrowth } test series.");
+        throw new Error(`Each series must be ${SIMULATION_YEARS} positive values or a valid { start, annualGrowth } test series.`);
       }
       const values = Array.from({ length: SIMULATION_YEARS }, (_, year) => (
         Math.round(series.start * (1 + series.annualGrowth) ** year * 100) / 100
@@ -146,7 +146,7 @@ function readStore() {
   try {
     const state = JSON.parse(fs.readFileSync(STORE_FILE, "utf8"));
     if (state.schemaVersion !== SCHEMA_VERSION) {
-      throw new Error("Saved Bloodlines data uses an older game flow. Back it up and remove BLOODLINES_STORE_FILE to start the nine-subround version.");
+      throw new Error("Saved Bloodlines data uses an incompatible simulation version. Back it up and remove BLOODLINES_STORE_FILE to start the 60-year, six-subround version.");
     }
     state.returnsBySubround ||= {};
     state.wheelBySubround ||= {};
@@ -203,7 +203,7 @@ function validateSchedule(schedule) {
     nextYear = end + 1;
     return { start, end };
   });
-  if (nextYear !== SIMULATION_YEARS + 1) throw new Error(`The nine sub-rounds must cover Years 1–${SIMULATION_YEARS} without gaps.`);
+  if (nextYear !== SIMULATION_YEARS + 1) throw new Error(`The ${SUBROUNDS} sub-rounds must cover Years 1–${SIMULATION_YEARS} without gaps.`);
   return normalized;
 }
 
@@ -852,7 +852,7 @@ function advance(state, data, session, market, registeredTeams) {
       openAllocationWindow(state, state.activeSubround, "initial");
     }
   } else if (data.action === "publish") {
-    if (!state.completed) throw new Error("Complete all nine sub-rounds before publishing final scores.");
+    if (!state.completed) throw new Error(`Complete all ${SUBROUNDS} sub-rounds before publishing final scores.`);
     state.published = true;
   } else {
     throw new Error("Choose a valid Bloodlines control action.");

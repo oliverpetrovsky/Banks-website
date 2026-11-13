@@ -64,6 +64,8 @@ function applyRoundMode() {
   const isRoundTwo = document.body.dataset.round === "2";
   document.querySelector("#admin-dashboard").hidden = isRoundTwo || !adminState.authenticated;
   document.querySelector("#bloodlines-admin-panel").hidden = !isRoundTwo || !adminState.authenticated;
+  const privateCredit = document.querySelector("#admin-private-credit-section");
+  if (privateCredit) privateCredit.hidden = isRoundTwo;
   const form = document.querySelector("#auction-control-form");
   form.elements.era.disabled = true;
   form.elements.companyId.disabled = isRoundTwo;
@@ -521,7 +523,7 @@ function renderBloodlinesAdmin(state, scoreboard) {
     : "Waiting to start";
   document.querySelector("#bloodlines-admin-year").textContent = state.started
     ? `${state.subround} / ${state.subrounds} · ${state.years.start}–${state.years.end}`
-    : "1–80";
+    : "1–60";
   document.querySelector("#bloodlines-admin-stage").textContent = state.started
     ? state.stageName.toUpperCase()
     : "NOT STARTED";
@@ -534,7 +536,7 @@ function renderBloodlinesAdmin(state, scoreboard) {
   document.querySelector("#bloodlines-admin-message").textContent = state.published
     ? "Final results are published to participants."
     : state.completed
-      ? "All 80 simulation years are complete. Publish the final scoreboard when ready."
+      ? "All 60 simulation years are complete. Publish the final scoreboard when ready."
       : state.started
           ? state.stage === "allocation" && !state.returnsConfigured
             ? "Set annual returns for every investment option before teams can allocate."
@@ -581,14 +583,14 @@ function renderBloodlinesAdmin(state, scoreboard) {
       start.type = "number";
       start.name = `start-${index}`;
       start.min = "1";
-      start.max = "80";
+      start.max = "60";
       start.value = range.start;
       start.setAttribute("aria-label", `Sub-round ${index + 1} start year`);
       const end = document.createElement("input");
       end.type = "number";
       end.name = `end-${index}`;
       end.min = "1";
-      end.max = "80";
+      end.max = "60";
       end.value = range.end;
       end.setAttribute("aria-label", `Sub-round ${index + 1} end year`);
       row.append(caption, start, end);

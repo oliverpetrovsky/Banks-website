@@ -66,12 +66,12 @@ function renderBloodlinesResults(data) {
   renderBloodlinesWheel(data);
   if (!data.published) {
     status.textContent = data.completed
-      ? "The 80-year simulation is complete. Final scores will appear after the admin publishes them."
-      : "Final scores appear here after the admin completes and publishes all nine sub-rounds.";
+      ? "The 60-year simulation is complete. Final scores will appear after the admin publishes them."
+      : "Final scores appear here after the admin completes and publishes all six sub-rounds.";
     board.replaceChildren();
     return;
   }
-  status.textContent = "Final household net worth after 80 simulated years.";
+  status.textContent = "Final household net worth after 60 simulated years.";
   if (!data.teams.length) {
     board.replaceChildren();
     return;

@@ -129,6 +129,7 @@ function renderBankingAccount(banking) {
 
 function renderTeamLoans(data) {
   const section = document.querySelector("#inter-team-loans");
+  section.hidden = document.body.dataset.round === "2";
   const lenderSelect = document.querySelector("#loan-request-form select[name=lenderKey]");
   const selectedLender = lenderSelect.value;
   lenderSelect.replaceChildren(...data.counterparties.map((team) => {
@@ -726,11 +727,14 @@ async function refreshTeamPanel() {
   try {
     if (document.body.dataset.round === "2") {
       document.querySelector("#banking-account").hidden = true;
+      document.querySelector("#inter-team-loans").hidden = true;
+      document.querySelector("#bloodlines-team-panel").hidden = false;
       const state = await api("/api/bloodlines/state");
       renderBloodlines(state);
       return;
     }
     document.querySelector("#banking-account").hidden = false;
+    document.querySelector("#inter-team-loans").hidden = false;
     document.querySelector("#bloodlines-team-panel").hidden = true;
     document.querySelector("#team-auction").hidden = false;
     const [auction, results, loans] = await Promise.all([

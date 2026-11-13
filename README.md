@@ -27,7 +27,7 @@ Deploy from the repository root. The `final-site/` folder is Git-ignored and is 
 Before creating the Render service:
 
 1. Push the updated repository to GitHub. Do not add company data, team access codes, market data, or the private access-code CSV to Git.
-2. Prepare a private `bloodlines-market.json` using real event assumptions. It must include 80 positive annual values for each equity and fund in `prices.equities` and `prices.funds`, 80 values in `prices.gold`, 80 salary values, 80 expense values, and `household.startingCash`. `data/bloodlines-test-market.json` is synthetic test data and must not be used for the live event.
+2. Prepare a private `bloodlines-market.json` using real event assumptions. It must include 60 positive annual values for each equity and fund in `prices.equities` and `prices.funds`, 60 values in `prices.gold`, 60 salary values, 60 expense values, and `household.startingCash`. `data/bloodlines-test-market.json` is synthetic test data and must not be used for the live event.
 
 Create the service and upload its private inputs:
 
@@ -89,7 +89,7 @@ Bid records, salted team access-code hashes, cash balances, company positions, a
 
 ## Round 2: Bloodlines
 
-Bloodlines guides each household through an 80-year simulation split into nine admin-configurable, consecutive sub-rounds. The default schedule covers Years 1–9, 10–18, and so on through Years 73–80. Before starting, the admin may edit the ranges; they must cover Years 1–80 exactly, with no gaps or overlap.
+Bloodlines guides each household through a 60-year simulation split into six admin-configurable, consecutive sub-rounds. The default schedule covers Years 1–10, 11–20, and so on through Years 51–60. Before starting, the admin may edit the ranges; they must cover Years 1–60 exactly, with no gaps or overlap.
 
 Each sub-round follows the same sequence:
 
@@ -102,7 +102,7 @@ Each sub-round follows the same sequence:
 
 The admin controls each step at `/admin` after selecting Round 2. Teams sign in at `/team` to see their private portfolio and current net worth, each sub-round's annual returns, news effects and affected investments, market disclosures, Wheel progress, and their allocation form during the two allocation windows. Each team sees only its own net worth until the admin publishes the public leaderboard.
 
-The fictional `data/bloodlines-test-market.json` is for testing only. It uses deterministic `{ "start": number, "annualGrowth": number }` series, expanded to 80 annual values by the server. An event market file can instead provide exactly 80 positive values for each equity and fund under `prices.equities` and `prices.funds`, 80 values in `prices.gold`, and 80 values each for `household.salary` and `household.expenses`. It must also include `household.startingCash`. Keep actual event data in a private file and set `BLOODLINES_MARKET_FILE` to its path; never commit real market, household, or event data. Bloodlines state is stored separately in `.data/bloodlines.json` by default; set `BLOODLINES_STORE_FILE` to change it. The new simulation flow uses a different save schema from the earlier four-year version: back up the old file and move it aside before starting this version. As with Round 1, Render's free filesystem is ephemeral and is unsuitable for a live event.
+The fictional `data/bloodlines-test-market.json` is for testing only. It uses deterministic `{ "start": number, "annualGrowth": number }` series, expanded to 60 annual values by the server. An event market file can instead provide exactly 60 positive values for each equity and fund under `prices.equities` and `prices.funds`, 60 values in `prices.gold`, and 60 values each for `household.salary` and `household.expenses`. It must also include `household.startingCash`. Keep actual event data in a private file and set `BLOODLINES_MARKET_FILE` to its path; never commit real market, household, or event data. Bloodlines state is stored separately in `.data/bloodlines.json` by default; set `BLOODLINES_STORE_FILE` to change it. This 60-year, six-subround flow uses a new save schema: back up and remove any saved 80-year Bloodlines state before starting this version. As with Round 1, Render's free filesystem is ephemeral and is unsuitable for a live event.
 
 ## Before the event
 

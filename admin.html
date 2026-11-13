@@ -25,7 +25,7 @@
           <span id="admin-round-message" class="admin-round-message" role="status"></span>
         </div>
       </header>
-      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Run an 80-year household simulation across nine sub-rounds. Round 1 auction controls are unavailable while this round is selected.</p>
+      <p id="round-two-notice" class="round-notice" role="status" hidden><strong>Round 2 · Bloodlines.</strong> Run a 60-year household simulation across six sub-rounds. Round 1 auction controls are unavailable while this round is selected.</p>
       <main class="panel-main">
         <section class="panel-heading">
           <p class="eyebrow"><span class="eyebrow-line"></span> E-CELL EVENT CONTROL</p>
@@ -58,7 +58,7 @@
             <div id="round-one-qualifier-list" class="round-one-qualifier-list"></div>
             <button class="button button-danger" id="round-one-closeout-submit" type="button" disabled>END ROUND 1 &amp; LOCK QUALIFIERS</button>
           </section>
-          <section class="banking-flow">
+          <section id="admin-private-credit-section" class="banking-flow" hidden>
             <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> PRIVATE CREDIT</p><h2>Inter-team loan review</h2></div><button class="button button-ghost" id="admin-loans-refresh" type="button">REFRESH LOANS</button></div>
             <p class="public-board-note">Review loans accepted by both teams. Cash moves only after admin approval.</p>
             <div id="admin-loan-list" class="loan-list"></div>
@@ -103,7 +103,7 @@
             <div><span class="panel-index">STAGE</span><strong id="bloodlines-admin-stage">—</strong></div>
             <div><span class="panel-index">TEAMS SUBMITTED</span><strong id="bloodlines-admin-submissions">—</strong></div>
           </div>
-          <p id="bloodlines-admin-message" class="public-board-note">Set the nine year ranges, then start the simulation. Each sub-round covers a contiguous portion of the 80-year timeline.</p>
+          <p id="bloodlines-admin-message" class="public-board-note">Set the six year ranges, then start the simulation. Each sub-round covers a contiguous portion of the 60-year timeline.</p>
           <form id="bloodlines-team-kick-form" class="bloodlines-team-kick">
             <label><span>REMOVE A TEAM FROM THE EVENT</span><select name="teamKey" required></select></label>
             <button class="button button-danger" type="submit">KICK TEAM</button>
@@ -111,7 +111,7 @@
           </form>
           <form id="bloodlines-schedule-form" class="bloodlines-schedule" hidden>
             <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> SIMULATION CONFIGURATION</p><h2>Sub-round year ranges</h2></div></div>
-            <p class="public-board-note">Ranges must be consecutive and cover Years 1–80 exactly.</p>
+            <p class="public-board-note">Ranges must be consecutive and cover Years 1–60 exactly.</p>
             <div id="bloodlines-schedule-ranges" class="bloodlines-schedule-ranges"></div>
             <button class="button button-outline" type="submit">SAVE YEAR RANGES</button>
             <p class="form-message" aria-live="polite"></p>
