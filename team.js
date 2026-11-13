@@ -77,10 +77,10 @@ function renderBankingAccount(banking) {
   if (!banking) return;
   const settlementNote = document.querySelector("#banking-settlement-note");
   if (settlementNote) {
-    settlementNote.textContent = "Settlements occur at the end of each decade and again at the end of each era.";
+    settlementNote.textContent = "Settlements occur at the end of each 25-year period and again at the end of each era.";
   }
   period.textContent = banking.current
-    ? `${banking.current.eraName} · ${banking.current.decade || "Era settlement"} · decade ${banking.current.decadeIndex}/${banking.current.decadeCount}`
+    ? `${banking.current.eraName} · ${banking.current.period || "Era settlement"} · period ${banking.current.periodIndex}/${banking.current.periodCount}`
     : "All eras complete";
   balance.textContent = formatRupees(banking.balance);
   const positions = [
@@ -99,8 +99,8 @@ function renderBankingAccount(banking) {
       name.textContent = position.companyName;
       const detail = document.createElement("span");
       detail.textContent = position.npi === null
-        ? `${position.decade} · INVESTED ${formatRupees(position.principal)} · awaiting decade result`
-        : `${position.decade} · NPI ${Number(position.npi).toFixed(2)} · interest ${formatRupees(position.interestPaid)}${position.archived ? ` · era-end principal ${formatRupees(position.principalReturned)}` : ""}`;
+        ? `${position.period} · INVESTED ${formatRupees(position.principal)} · awaiting period result`
+        : `${position.period} · NPI ${Number(position.npi).toFixed(2)} · interest ${formatRupees(position.interestPaid)}${position.archived ? ` · era-end principal ${formatRupees(position.principalReturned)}` : ""}`;
       row.append(name, detail);
       return row;
     }));
@@ -109,7 +109,7 @@ function renderBankingAccount(banking) {
     const item = document.createElement("li");
     const amount = entry.amount >= 0 ? `+${formatRupees(entry.amount)}` : formatRupees(entry.amount);
     const source = entry.type === "bond"
-      ? `4% bond growth · ${entry.decade}`
+      ? `4% bond growth · ${entry.period}`
       : entry.type === "company-interest"
         ? `Company interest · ${entry.companyId}`
         : entry.type === "loan-funded"
@@ -181,7 +181,7 @@ function renderTeamLoans(data) {
       }
       if (loan.status === "active") {
         const outstanding = document.createElement("p");
-        outstanding.textContent = `Outstanding principal ${formatRupees(loan.outstandingPrincipal)} · annual installment ${formatRupees(loan.annualPayment)} · payments occur automatically at decade settlements.`;
+        outstanding.textContent = `Outstanding principal ${formatRupees(loan.outstandingPrincipal)} · annual installment ${formatRupees(loan.annualPayment)} · payments occur automatically at 25-year settlements.`;
         card.append(outstanding);
       }
       if (loan.status === "defaulted") {
@@ -192,7 +192,7 @@ function renderTeamLoans(data) {
       if (loan.payments?.length) {
         const paymentHistory = document.createElement("p");
         paymentHistory.textContent = `Payments: ${loan.payments.slice(-3).map((payment) =>
-          `#${payment.installment} ${formatRupees(payment.paid)} (${payment.decade})`
+          `#${payment.installment} ${formatRupees(payment.paid)} (${payment.period})`
         ).join(" · ")}`;
         card.append(paymentHistory);
       }
@@ -371,7 +371,7 @@ function renderAuction(data) {
     waiting.hidden = false;
     deal.hidden = true;
     const currentPeriod = data.banking
-      ? `${data.banking.eraName} · ${data.banking.decade || "era settlement"}`
+      ? `${data.banking.eraName} · ${data.banking.period || "era settlement"}`
       : "Waiting for the auction";
     document.querySelector("#team-auction-title").textContent = currentPeriod;
     label.textContent = "WAITING";
@@ -394,7 +394,7 @@ function renderAuction(data) {
     teamState.editingOffer = false;
     const form = document.querySelector("#bid-form");
     delete form.dataset.hasSubmitted;
-    document.querySelector("#deal-meta").textContent = `${company.id} · ${company.eraName} · ${company.decade}`;
+    document.querySelector("#deal-meta").textContent = `${company.id} · ${company.eraName} · ${company.period}`;
     document.querySelector("#deal-name").textContent = company.name;
     document.querySelector("#deal-sector").textContent = company.sector;
     document.querySelector("#deal-summary").textContent = company.summary;
@@ -476,7 +476,7 @@ function renderBloodlines(state, draftOverride = null) {
     ? `${state.stageName.replaceAll("_", " ").toUpperCase()}`
     : "WAITING";
   notice.textContent = state.started
-    ? `Annual salary ${formatBloodlinesValue(state.current.salary)} · household expenses ${formatBloodlinesValue(state.current.expenses)} · ${state.status === "trading" ? "Allocation is open; save or update your portfolio." : state.stage === "allocation" ? "Waiting for the admin to set this sub-round's returns before allocations open." : `Simulation Year ${state.year} · decisions are locked until the next allocation window.`}`
+    ? `Annual salary ${formatBloodlinesValue(state.current.salary)} · household expenses ${formatBloodlinesValue(state.current.expenses)} · uninvested cash earns no interest · ${state.status === "trading" ? "Allocation is open; save or update your portfolio." : state.stage === "allocation" ? "Waiting for the admin to set this sub-round's returns before allocations open." : `Simulation Year ${state.year} · decisions are locked until the next allocation window.`}`
     : "Your household ledger and investment decisions will appear when the admin starts Bloodlines.";
   document.querySelector("#bloodlines-coverage").textContent = state.started
     ? `ACTIVE INSURANCE · ${state.coverage.length ? state.coverage.join(" · ") : "No active cover"}`
@@ -611,7 +611,14 @@ function renderBloodlines(state, draftOverride = null) {
     state.instruments.forEach((optionInstrument) => {
       const option = document.createElement("option");
       option.value = optionInstrument.id;
-      option.textContent = optionInstrument.name;
+      const returnRange = state.returnRanges?.[optionInstrument.id];
+      const formatPercent = (value) => String(Number(Number(value).toFixed(2)));
+      const rangeText = returnRange
+        ? returnRange.min === returnRange.max
+          ? `${formatPercent(returnRange.min)}%`
+          : `${formatPercent(returnRange.min)}-${formatPercent(returnRange.max)}%`
+        : "range not set";
+      option.textContent = `${optionInstrument.name} · ${rangeText}`;
       instrumentSelect.append(option);
     });
     instrumentSelect.value = instrument.id;
@@ -620,7 +627,7 @@ function renderBloodlines(state, draftOverride = null) {
     const renderTradePrice = () => {
       const selectedInstrument = instrumentById.get(instrumentSelect.value);
       price.textContent = selectedInstrument.type === "fd"
-        ? `${selectedInstrument.rate * 100}% p.a.`
+        ? "Fixed deposit · ₹10,000 increments"
         : formatBloodlinesValue(state.tradePrices[selectedInstrument.id]);
     };
     renderTradePrice();

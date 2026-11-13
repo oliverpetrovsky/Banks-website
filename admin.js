@@ -199,7 +199,7 @@ function renderBankingProgress(state, auctionStatus) {
   const progress = document.querySelector("#banking-progress");
   const message = document.querySelector("#banking-message");
   const errors = document.querySelector("#banking-errors");
-  const settleButton = document.querySelector("#banking-settle-decade");
+  const settleButton = document.querySelector("#banking-settle-period");
   const fastForwardButton = document.querySelector("#banking-fast-forward");
   const teams = document.querySelector("#banking-team-balances");
   const result = document.querySelector("#banking-settlement-result");
@@ -217,14 +217,14 @@ function renderBankingProgress(state, auctionStatus) {
     period.textContent = state.complete ? "Round 1 is complete" : "No active era";
     progress.textContent = state.complete ? "COMPLETE" : "NOT READY";
     message.textContent = state.complete
-      ? "All eras and decade settlements are complete. Team balances carry forward with no open company positions."
+      ? "All eras and 25-year settlements are complete. Team balances carry forward with no open company positions."
       : "Correct the company dataset errors before running Round 1.";
   } else {
-    period.textContent = `${state.current.eraName} · ${state.current.decade}`;
-    progress.textContent = `DECADE ${String(state.current.decadeIndex).padStart(2, "0")} / ${state.current.decadeCount}`;
+    period.textContent = `${state.current.eraName} · ${state.current.period}`;
+    progress.textContent = `PERIOD ${String(state.current.periodIndex).padStart(2, "0")} / ${state.current.periodCount}`;
     const pending = state.current.companies.filter((company) => !company.auctioned).length;
     message.textContent = state.ready
-      ? `${pending} company auction${pending === 1 ? "" : "s"} remain in this decade. Idle cash compounds at 4% annually; decade interest and NPI settle after every company closes.`
+      ? `${pending} company auction${pending === 1 ? "" : "s"} remain in this 25-year period. Idle cash compounds at 4% annually; period interest and NPI settle after every company closes.`
       : "Correct the company dataset errors before opening or settling auctions.";
   }
   teams.replaceChildren(...state.teams.map((team) => {
@@ -240,7 +240,7 @@ function renderBankingProgress(state, auctionStatus) {
   result.hidden = !last;
   if (last) {
     const heading = document.createElement("strong");
-    heading.textContent = `LAST SETTLEMENT · ${last.eraName} · ${last.decade}`;
+    heading.textContent = `LAST SETTLEMENT · ${last.eraName} · ${last.period}`;
     const rows = document.createElement("div");
     rows.className = "banking-settlement-rows";
     for (const outcome of last.outcomes) {
@@ -304,7 +304,7 @@ function renderAdminLoans(loans) {
     }
     if (loan.status === "active") {
       const outstanding = document.createElement("p");
-      outstanding.textContent = `Outstanding principal ${formatRupees(loan.outstandingPrincipal)} · annual installment ${formatRupees(loan.annualPayment)} · scheduled payments at decade checkpoints`;
+      outstanding.textContent = `Outstanding principal ${formatRupees(loan.outstandingPrincipal)} · annual installment ${formatRupees(loan.annualPayment)} · scheduled payments at 25-year checkpoints`;
       card.append(outstanding);
     }
     if (loan.status === "defaulted") {
@@ -315,7 +315,7 @@ function renderAdminLoans(loans) {
     if (loan.payments?.length) {
       const paymentHistory = document.createElement("p");
       paymentHistory.textContent = `Payments: ${loan.payments.slice(-3).map((payment) =>
-        `#${payment.installment} ${formatRupees(payment.paid)} (${payment.decade})`
+        `#${payment.installment} ${formatRupees(payment.paid)} (${payment.period})`
       ).join(" · ")}`;
       card.append(paymentHistory);
     }
@@ -358,7 +358,7 @@ function renderStandings(auction, board) {
     status.textContent = "Waiting for an auction.";
     title.textContent = "No company selected";
     caption.textContent = adminState.banking?.current
-      ? "Only companies in the active decade can be opened. Future companies are hidden from participants."
+      ? "Only companies in the active 25-year period can be opened. Future companies are hidden from participants."
       : "The team leaderboard will appear when the next company auction opens.";
     target.replaceChildren();
     return;
@@ -902,13 +902,13 @@ async function logout() {
   }
 }
 
-async function settleBankingDecade() {
-  const button = document.querySelector("#banking-settle-decade");
+async function settleBankingPeriod() {
+  const button = document.querySelector("#banking-settle-period");
   button.disabled = true;
   try {
-    await api("/api/admin/banking/settle-decade", { method: "POST", body: "{}" });
+    await api("/api/admin/banking/settle-period", { method: "POST", body: "{}" });
     await refreshDashboard();
-    showToast("Decade settled; cash growth and company outcomes are recorded.");
+    showToast("25-year period settled; cash growth and company outcomes are recorded.");
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -919,17 +919,17 @@ async function settleBankingDecade() {
 async function fastForwardBanking() {
   const button = document.querySelector("#banking-fast-forward");
   const confirmed = window.confirm(
-    "Skip all remaining Round 1 decades through Era 3's final decade? Unauctioned companies will be marked uninvested. Cash growth, existing company settlements, and scheduled loan payments will be processed normally; unpaid installments can still default. Unresolved loan requests will expire. Era 3's final decade will remain open for normal play."
+    "Skip all remaining Round 1 periods through Era 3's final 25-year period? Unauctioned companies will be marked uninvested. Cash growth, existing company settlements, and scheduled loan payments will be processed normally; unpaid installments can still default. Unresolved loan requests will expire. Era 3's final period will remain open for normal play."
   );
   if (!confirmed) return;
   button.disabled = true;
   try {
-    const result = await api("/api/admin/banking/fast-forward-era-three-final-decade", {
+    const result = await api("/api/admin/banking/fast-forward-era-three-final-period", {
       method: "POST",
       body: "{}"
     });
     await refreshDashboard();
-    showToast(`Skipped ${result.skippedDecades.length} decades to ${result.target.era} · ${result.target.decade}.`);
+    showToast(`Skipped ${result.skippedPeriods.length} periods to ${result.target.era} · ${result.target.period}.`);
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -993,7 +993,7 @@ async function initialize() {
   control.addEventListener("submit", openAuction);
   document.querySelector("#close-auction").addEventListener("click", closeAuction);
   document.querySelector("#admin-refresh").addEventListener("click", refreshDashboard);
-  document.querySelector("#banking-settle-decade").addEventListener("click", settleBankingDecade);
+  document.querySelector("#banking-settle-period").addEventListener("click", settleBankingPeriod);
   document.querySelector("#banking-fast-forward").addEventListener("click", fastForwardBanking);
   document.querySelector("#round-one-closeout-submit").addEventListener("click", closeRoundOne);
   document.querySelector("#round-one-qualifier-list").addEventListener("change", (event) => {

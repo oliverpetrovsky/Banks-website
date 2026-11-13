@@ -44,6 +44,23 @@ const WHEEL_EVENTS = [
   { id: "windfall", name: "Ancestral Property Windfall", amount: 300000 }
 ];
 
+function shuffledWheelEventOrder(teamCount) {
+  const eventIds = [];
+  while (eventIds.length < teamCount) {
+    const cycle = WHEEL_EVENTS.map((event) => event.id);
+    for (let index = cycle.length - 1; index > 0; index -= 1) {
+      const swapIndex = crypto.randomInt(index + 1);
+      [cycle[index], cycle[swapIndex]] = [cycle[swapIndex], cycle[index]];
+    }
+    if (eventIds.length && cycle[0] === eventIds[eventIds.length - 1]) {
+      const swapIndex = cycle.findIndex((eventId, index) => index > 0 && eventId !== cycle[0]);
+      [cycle[0], cycle[swapIndex]] = [cycle[swapIndex], cycle[0]];
+    }
+    eventIds.push(...cycle);
+  }
+  return eventIds.slice(0, teamCount);
+}
+
 function emptyStore(teams = []) {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -57,6 +74,8 @@ function emptyStore(teams = []) {
     returnsBySubround: {},
     newsBySubround: {},
     wheelBySubround: {},
+    wheelTeamOrderBySubround: {},
+    wheelEventOrderBySubround: {},
     currentSpin: null,
     published: false,
     completed: false,
@@ -130,6 +149,9 @@ function readStore() {
       throw new Error("Saved Bloodlines data uses an older game flow. Back it up and remove BLOODLINES_STORE_FILE to start the nine-subround version.");
     }
     state.returnsBySubround ||= {};
+    state.wheelBySubround ||= {};
+    state.wheelTeamOrderBySubround ||= {};
+    state.wheelEventOrderBySubround ||= {};
     return state;
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
@@ -782,6 +804,8 @@ function advance(state, data, session, market, registeredTeams) {
       throw new Error("Release a news flash for every year in this sub-round before spinning.");
     }
     state.activeStage = "wheel";
+    state.wheelTeamOrderBySubround[state.activeSubround] = [...state.teamOrder];
+    state.wheelEventOrderBySubround[state.activeSubround] = shuffledWheelEventOrder(state.teamOrder.length);
     state.wheelBySubround[state.activeSubround] = Object.fromEntries(state.teamOrder.map((key) => [key, {
       teamKey: key,
       team: state.teams[key].name,
@@ -793,7 +817,14 @@ function advance(state, data, session, market, registeredTeams) {
     if (state.currentSpin) throw new Error("Wait for the current team's spin to finish.");
     const entry = wheelEntries(state).find((item) => item.status === "waiting");
     if (!entry) throw new Error("Every team has already spun this sub-round.");
-    const event = WHEEL_EVENTS[crypto.randomInt(WHEEL_EVENTS.length)];
+    state.wheelTeamOrderBySubround[state.activeSubround] ||= [...state.teamOrder];
+    state.wheelEventOrderBySubround[state.activeSubround] ||= shuffledWheelEventOrder(
+      state.wheelTeamOrderBySubround[state.activeSubround].length
+    );
+    const eventIndex = state.wheelTeamOrderBySubround[state.activeSubround].indexOf(entry.teamKey);
+    const eventId = state.wheelEventOrderBySubround[state.activeSubround][eventIndex];
+    const event = WHEEL_EVENTS.find((item) => item.id === eventId);
+    if (!event) throw new Error("The Wheel event order for this sub-round is unavailable.");
     state.currentSpin = {
       teamKey: entry.teamKey,
       eventId: event.id,

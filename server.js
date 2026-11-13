@@ -18,7 +18,8 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 10;
 const MAX_BODY_BYTES = 16 * 1024;
 const BANKING_BOND_RATE = 0.04;
-const BANKING_DECADE_YEARS = 10;
+const BANKING_PERIOD_YEARS = 25;
+const BANKING_PERIODS_PER_ERA = 4;
 const MAX_ACTIVE_LOANS = 2;
 const MAX_LENDING_RATIO = 0.15;
 const LOAN_REQUEST_WINDOW_MS = 60 * 1000;
@@ -151,25 +152,25 @@ function companyEraOrder() {
   return [...new Set(companies.map((company) => company.era))];
 }
 
-function parseDecadeStart(decade) {
-  const match = typeof decade === "string"
-    ? decade.trim().match(/^(\d{4})\s*[-–—]\s*(\d{4})$/)
+function parsePeriodStart(period) {
+  const match = typeof period === "string"
+    ? period.trim().match(/^(\d{4})\s*[-–—]\s*(\d{4})$/)
     : null;
-  if (!match || Number(match[2]) - Number(match[1]) !== 9) return null;
+  if (!match || Number(match[2]) - Number(match[1]) !== BANKING_PERIOD_YEARS - 1) return null;
   return Number(match[1]);
 }
 
-function decadesForEra(era) {
+function periodsForEra(era) {
   const groups = new Map();
   for (const company of companies.filter((item) => item.era === era)) {
-    if (!groups.has(company.decade)) {
-      groups.set(company.decade, { decade: company.decade, start: parseDecadeStart(company.decade), companies: [] });
+    if (!groups.has(company.period)) {
+      groups.set(company.period, { period: company.period, start: parsePeriodStart(company.period), companies: [] });
     }
-    groups.get(company.decade).companies.push(company);
+    groups.get(company.period).companies.push(company);
   }
   return [...groups.values()].sort((a, b) => {
     if (a.start !== null && b.start !== null) return a.start - b.start;
-    return String(a.decade).localeCompare(String(b.decade));
+    return String(a.period).localeCompare(String(b.period));
   });
 }
 
@@ -201,23 +202,23 @@ function bankingSetupErrors() {
     if (!Number.isFinite(company.growthMultiplier) || company.growthMultiplier <= 0) {
       errors.push(`${company.id}: growthMultiplier must be a positive number.`);
     }
-    if (parseDecadeStart(company.decade) === null) {
-      errors.push(`${company.id}: decade must be a 10-year range such as "1811-1820".`);
+    if (parsePeriodStart(company.period) === null) {
+      errors.push(`${company.id}: period must be a 25-year range such as "1801-1825".`);
     }
   }
   for (const era of eras) {
-    const groups = decadesForEra(era);
-    if (groups.length !== 10) {
-      errors.push(`${era}: expected exactly 10 distinct decade groups, found ${groups.length}.`);
+    const groups = periodsForEra(era);
+    if (groups.length !== BANKING_PERIODS_PER_ERA) {
+      errors.push(`${era}: expected exactly ${BANKING_PERIODS_PER_ERA} distinct 25-year periods, found ${groups.length}.`);
     }
     const starts = groups.map((group) => group.start).filter((start) => start !== null);
     if (new Set(starts).size !== starts.length) {
-      errors.push(`${era}: decade year ranges must be unique.`);
+      errors.push(`${era}: period year ranges must be unique.`);
     }
     for (let index = 1; index < groups.length; index += 1) {
       if (groups[index - 1].start !== null && groups[index].start !== null
-          && groups[index].start < groups[index - 1].start + BANKING_DECADE_YEARS) {
-        errors.push(`${era}: decade year ranges must not overlap.`);
+          && groups[index].start !== groups[index - 1].start + BANKING_PERIOD_YEARS) {
+        errors.push(`${era}: period ranges must be consecutive and non-overlapping.`);
         break;
       }
     }
@@ -231,11 +232,33 @@ function newBankingAccount() {
 
 function ensureBankingState(store) {
   let changed = false;
-  if (!store.banking || store.banking.schemaVersion !== 1) {
+  if (store.banking?.schemaVersion === 1) {
+    const banking = store.banking;
+    const hasFinancialActivity = banking.activeEraIndex !== 0
+      || banking.decadeIndex !== 0
+      || banking.settlementHistory?.length > 0
+      || Object.values(banking.accounts || {}).some((account) => (
+        account.balance !== VAULT_CAPITAL || account.portfolio?.length || account.ledger?.length
+      ))
+      || Object.keys(store.results || {}).length > 0
+      || store.bids.length > 0
+      || store.loans.length > 0
+      || store.auction.status === "open";
+    if (hasFinancialActivity) {
+      throw Object.assign(new Error("This Round 1 save uses 10-year settlements and cannot safely be converted to 25-year periods. Back it up and reset Round 1 before switching period lengths."), { status: 409 });
+    }
+    banking.schemaVersion = 2;
+    banking.periodYears = BANKING_PERIOD_YEARS;
+    banking.periodIndex = 0;
+    delete banking.decadeIndex;
+    changed = true;
+  }
+  if (!store.banking || store.banking.schemaVersion !== 2) {
     const banking = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       activeEraIndex: 0,
-      decadeIndex: 0,
+      periodYears: BANKING_PERIOD_YEARS,
+      periodIndex: 0,
       complete: false,
       accounts: {},
       settlementHistory: [],
@@ -252,7 +275,7 @@ function ensureBankingState(store) {
       account.balance -= winningBid.principal;
       account.portfolio.push({
         era: company.era,
-        decade: company.decade,
+        period: company.period,
         companyId: company.id,
         teamKey: winningBid.teamKey,
         principal: winningBid.principal,
@@ -275,17 +298,17 @@ function ensureBankingState(store) {
   return changed;
 }
 
-function currentBankingGroup(store) {
+function currentBankingPeriod(store) {
   const eras = companyEraOrder();
   if (store.banking.complete || store.banking.activeEraIndex >= eras.length) return null;
   const era = eras[store.banking.activeEraIndex];
-  const groups = decadesForEra(era);
+  const groups = periodsForEra(era);
   return {
     era,
     eraName: companies.find((company) => company.era === era)?.eraName || era,
-    decadeIndex: store.banking.decadeIndex,
-    decadeCount: groups.length,
-    group: groups[store.banking.decadeIndex] || null
+    periodIndex: store.banking.periodIndex,
+    periodCount: groups.length,
+    period: groups[store.banking.periodIndex] || null
   };
 }
 
@@ -357,7 +380,7 @@ function roundOnePerformance(store) {
 }
 
 function roundOneCloseoutError(store, allowEarlyClose = false) {
-  if (!allowEarlyClose && !store.banking.complete) return "Complete all Round 1 eras and decade settlements first.";
+  if (!allowEarlyClose && !store.banking.complete) return "Complete all Round 1 eras and 25-year settlements first.";
   if (store.auction.status === "open") return "Close the active company auction before ending Round 1.";
   const teams = activeTeams(store);
   if (teams.length === 0) return "Keep at least one active team before ending Round 1.";
@@ -423,14 +446,14 @@ function sanitizeLoan(loan, viewerKey) {
         principal: payment.principal,
         unpaid: payment.unpaid,
         era: payment.era,
-        decade: payment.decade,
+        period: payment.period,
         paidAt: payment.paidAt
       }))
       : []
   };
 }
 
-function processLoanCheckpoint(store, era, decade) {
+function processLoanCheckpoint(store, era, period) {
   const payments = [];
   for (const loan of store.loans) {
     if (loan.status !== "active") continue;
@@ -441,7 +464,7 @@ function processLoanCheckpoint(store, era, decade) {
     }
 
     const installmentsThisCheckpoint = Math.min(
-      BANKING_DECADE_YEARS,
+      BANKING_PERIOD_YEARS,
       loan.termYears - loan.paidInstallments
     );
     let remainingCashToPay = borrower.balance;
@@ -481,7 +504,7 @@ function processLoanCheckpoint(store, era, decade) {
           principal: principalPaid,
           unpaid: loan.defaultAmount,
           era,
-          decade,
+          period,
           paidAt: new Date().toISOString()
         });
         break;
@@ -501,7 +524,7 @@ function processLoanCheckpoint(store, era, decade) {
         principal: principalDue,
         unpaid: 0,
         era,
-        decade,
+        period,
         paidAt: new Date().toISOString()
       });
     }
@@ -589,7 +612,7 @@ function createLoanRequest(store, borrowerKey, body) {
     createdAt: new Date().toISOString(),
     approvedAt: null,
     approvedEra: null,
-    approvedDecade: null,
+    approvedPeriod: null,
     paidInstallments: 0,
     outstandingPrincipal: principal,
     annualPayment: null,
@@ -620,8 +643,8 @@ function loanApprovalError(store, loan) {
   const borrower = store.banking.accounts[loan.borrowerKey];
   const lender = store.banking.accounts[loan.lenderKey];
   if (!borrower || !lender) return "A loan participant account is unavailable.";
-  if (store.activeRound !== 1 || !currentBankingGroup(store)?.group) {
-    return "An accepted loan can be approved only during an active Round 1 decade.";
+  if (store.activeRound !== 1 || !currentBankingPeriod(store)?.period) {
+    return "An accepted loan can be approved only during an active Round 1 period.";
   }
   if (activeLoansFor(store, loan.borrowerKey).length >= MAX_ACTIVE_LOANS
       || activeLoansFor(store, loan.lenderKey).length >= MAX_ACTIVE_LOANS) {
@@ -640,7 +663,7 @@ function loanApprovalError(store, loan) {
 function approveLoan(store, loan) {
   const error = loanApprovalError(store, loan);
   if (error) throw Object.assign(new Error(error), { status: 409 });
-  const current = currentBankingGroup(store);
+  const current = currentBankingPeriod(store);
   const borrower = store.banking.accounts[loan.borrowerKey];
   const lender = store.banking.accounts[loan.lenderKey];
   const rate = loan.ratePercent / 100;
@@ -649,7 +672,7 @@ function approveLoan(store, loan) {
     : Math.round(loan.principal / loan.termYears + loan.principal * rate);
   loan.approvedAt = new Date().toISOString();
   loan.approvedEra = current.era;
-  loan.approvedDecade = current.group.decade;
+  loan.approvedPeriod = current.period.period;
   loan.status = "active";
   lender.balance -= loan.principal;
   borrower.balance += loan.principal;
@@ -777,7 +800,7 @@ function publicCompany(company) {
     id: company.id,
     era: company.era,
     eraName: company.eraName,
-    decade: company.decade,
+    period: company.period,
     name: company.name,
     sector: company.sector,
     summary: company.summary,
@@ -836,7 +859,7 @@ function finalizeAuction(store) {
   account.balance -= winningBid.principal;
   account.portfolio.push({
     era: company.era,
-    decade: company.decade,
+    period: company.period,
     companyId: company.id,
     teamKey: winningBid.teamKey,
     principal: winningBid.principal,
@@ -898,7 +921,7 @@ function privateBankingAccount(store, teamKey) {
       companyId: position.companyId,
       companyName: company?.name || position.companyId,
       era: position.era,
-      decade: position.decade,
+      period: position.period,
       principal: position.principal,
       ratePercent: position.ratePercent,
       npi: position.npi,
@@ -907,7 +930,7 @@ function privateBankingAccount(store, teamKey) {
       status: position.status
     };
   };
-  const current = currentBankingGroup(store);
+  const current = currentBankingPeriod(store);
   return {
     balance: account.balance,
     portfolio: account.portfolio.map(describePosition),
@@ -917,37 +940,37 @@ function privateBankingAccount(store, teamKey) {
     current: current ? {
       era: current.era,
       eraName: current.eraName,
-      decade: current.group?.decade || null,
-      decadeIndex: current.decadeIndex + 1,
-      decadeCount: current.decadeCount
+      period: current.period?.period || null,
+      periodIndex: current.periodIndex + 1,
+      periodCount: current.periodCount
     } : null,
-    ledger: account.ledger.slice(-50).reverse().map(({ type, era, decade, companyId, loanId, amount, npi }) => ({
-      type, era, decade, companyId, loanId, amount, npi
+    ledger: account.ledger.slice(-50).reverse().map(({ type, era, period, companyId, loanId, amount, npi }) => ({
+      type, era, period, companyId, loanId, amount, npi
     }))
   };
 }
 
-function settleBankingDecade(store) {
+function settleBankingPeriod(store) {
   const setupErrors = bankingSetupErrors();
   if (setupErrors.length) {
     throw Object.assign(new Error(setupErrors.join(" ")), { status: 409 });
   }
   if (store.auction.status === "open") {
-    throw Object.assign(new Error("Close the current company auction before settling this decade."), { status: 409 });
+    throw Object.assign(new Error("Close the current company auction before settling this period."), { status: 409 });
   }
-  const current = currentBankingGroup(store);
-  if (!current?.group) {
-    throw Object.assign(new Error("There is no active decade to settle."), { status: 409 });
+  const current = currentBankingPeriod(store);
+  if (!current?.period) {
+    throw Object.assign(new Error("There is no active period to settle."), { status: 409 });
   }
-  const missing = current.group.companies.filter(
+  const missing = current.period.companies.filter(
     (company) => !store.results[auctionKey(company.era, company.id)]
   );
   if (missing.length) {
-    throw Object.assign(new Error(`Close every company auction in this decade before settling: ${missing.map((company) => company.id).join(", ")}.`), { status: 409 });
+    throw Object.assign(new Error(`Close every company auction in this period before settling: ${missing.map((company) => company.id).join(", ")}.`), { status: 409 });
   }
 
-  const decade = current.group.decade;
-  const bondFactor = (1 + BANKING_BOND_RATE) ** BANKING_DECADE_YEARS;
+  const period = current.period.period;
+  const bondFactor = (1 + BANKING_BOND_RATE) ** BANKING_PERIOD_YEARS;
   const bondCredits = [];
   for (const team of store.teams) {
     const account = store.banking.accounts[team.key];
@@ -957,7 +980,7 @@ function settleBankingDecade(store) {
     account.ledger.push({
       type: "bond",
       era: current.era,
-      decade,
+      period,
       amount,
       at: new Date().toISOString()
     });
@@ -965,7 +988,7 @@ function settleBankingDecade(store) {
   }
 
   const outcomes = [];
-  for (const company of current.group.companies) {
+  for (const company of current.period.companies) {
     const result = store.results[auctionKey(company.era, company.id)];
     if (!result.winnerTeamKey) {
       result.npi = 0;
@@ -992,20 +1015,20 @@ function settleBankingDecade(store) {
       Math.min(100, company.strategicCoefficient * (fundingModifier - interestDrag) / 100)
     ).toFixed(2));
     const interestPaid = npi >= 50
-      ? Math.round(winningBid.principal * winningBid.ratePercent / 100 * BANKING_DECADE_YEARS)
+      ? Math.round(winningBid.principal * winningBid.ratePercent / 100 * BANKING_PERIOD_YEARS)
       : 0;
     result.npi = npi;
     result.interestPaid = interestPaid;
     position.npi = result.npi;
     position.interestPaid = interestPaid;
-    position.status = "decade-settled";
+    position.status = "period-settled";
     if (interestPaid) {
       const account = store.banking.accounts[result.winnerTeamKey];
       account.balance += interestPaid;
       account.ledger.push({
         type: "company-interest",
         era: current.era,
-        decade,
+        period,
         companyId: company.id,
         amount: interestPaid,
         npi: result.npi,
@@ -1024,18 +1047,18 @@ function settleBankingDecade(store) {
   const settlement = {
     era: current.era,
     eraName: current.eraName,
-    decade,
-    decadeIndex: current.decadeIndex + 1,
+    period,
+    periodIndex: current.periodIndex + 1,
     settledAt: new Date().toISOString(),
     bondCredits,
-    loanPayments: processLoanCheckpoint(store, current.era, decade),
+    loanPayments: processLoanCheckpoint(store, current.era, period),
     outcomes,
     eraSettlement: null
   };
   store.banking.settlementHistory.push(settlement);
-  store.banking.decadeIndex += 1;
+  store.banking.periodIndex += 1;
 
-  if (store.banking.decadeIndex === 10) {
+  if (store.banking.periodIndex === BANKING_PERIODS_PER_ERA) {
     const principalReturns = [];
     for (const team of store.teams) {
       const account = store.banking.accounts[team.key];
@@ -1056,7 +1079,7 @@ function settleBankingDecade(store) {
         account.ledger.push({
           type: "principal-return",
           era: current.era,
-          decade: position.decade,
+          period: position.period,
           companyId: position.companyId,
           amount: principalReturned,
           npi: position.npi,
@@ -1083,7 +1106,7 @@ function settleBankingDecade(store) {
       principalReturns
     };
     store.banking.activeEraIndex += 1;
-    store.banking.decadeIndex = 0;
+    store.banking.periodIndex = 0;
     if (store.banking.activeEraIndex >= companyEraOrder().length) {
       store.banking.complete = true;
     }
@@ -1092,7 +1115,7 @@ function settleBankingDecade(store) {
   return settlement;
 }
 
-function fastForwardToEraThreeFinalDecade(store) {
+function fastForwardToEraThreeFinalPeriod(store) {
   const setupErrors = bankingSetupErrors();
   if (setupErrors.length) {
     throw Object.assign(new Error(setupErrors.join(" ")), { status: 409 });
@@ -1101,25 +1124,25 @@ function fastForwardToEraThreeFinalDecade(store) {
     throw Object.assign(new Error("Close the current company auction before fast-forwarding."), { status: 409 });
   }
   const eras = companyEraOrder();
-  if (eras.length !== 3 || decadesForEra(eras[2]).length !== 10) {
-    throw Object.assign(new Error("Fast-forward requires exactly three eras with ten decades in Era 3."), { status: 409 });
+  if (eras.length !== 3 || periodsForEra(eras[2]).length !== BANKING_PERIODS_PER_ERA) {
+    throw Object.assign(new Error("Fast-forward requires exactly three eras with four periods in Era 3."), { status: 409 });
   }
   const targetEraIndex = 2;
-  const targetDecadeIndex = 9;
+  const targetPeriodIndex = BANKING_PERIODS_PER_ERA - 1;
   if (store.banking.complete || store.banking.activeEraIndex > targetEraIndex
-      || store.banking.activeEraIndex === targetEraIndex && store.banking.decadeIndex >= targetDecadeIndex) {
-    throw Object.assign(new Error("Round 1 is already at or beyond Era 3's final decade."), { status: 409 });
+      || store.banking.activeEraIndex === targetEraIndex && store.banking.periodIndex >= targetPeriodIndex) {
+    throw Object.assign(new Error("Round 1 is already at or beyond Era 3's final period."), { status: 409 });
   }
 
   const skipped = [];
   while (store.banking.activeEraIndex < targetEraIndex
-      || store.banking.activeEraIndex === targetEraIndex && store.banking.decadeIndex < targetDecadeIndex) {
-    const current = currentBankingGroup(store);
-    if (!current?.group) {
-      throw Object.assign(new Error("Could not find the next decade to fast-forward."), { status: 409 });
+      || store.banking.activeEraIndex === targetEraIndex && store.banking.periodIndex < targetPeriodIndex) {
+    const current = currentBankingPeriod(store);
+    if (!current?.period) {
+      throw Object.assign(new Error("Could not find the next period to fast-forward."), { status: 409 });
     }
     const closedAt = new Date().toISOString();
-    for (const company of current.group.companies) {
+    for (const company of current.period.companies) {
       const key = auctionKey(company.era, company.id);
       if (store.results[key]) continue;
       store.results[key] = {
@@ -1130,8 +1153,8 @@ function fastForwardToEraThreeFinalDecade(store) {
         closedAt
       };
     }
-    const settlement = settleBankingDecade(store);
-    skipped.push({ era: settlement.eraName, decade: settlement.decade });
+    const settlement = settleBankingPeriod(store);
+    skipped.push({ era: settlement.eraName, period: settlement.period });
   }
 
   const closedAt = new Date().toISOString();
@@ -1142,10 +1165,10 @@ function fastForwardToEraThreeFinalDecade(store) {
     loan.closedAt = closedAt;
     expiredLoanRequests += 1;
   }
-  const target = currentBankingGroup(store);
+  const target = currentBankingPeriod(store);
   return {
-    target: { era: target.eraName, decade: target.group.decade },
-    skippedDecades: skipped,
+    target: { era: target.eraName, period: target.period.period },
+    skippedPeriods: skipped,
     expiredLoanRequests
   };
 }
@@ -1259,7 +1282,7 @@ async function handle(request, response) {
         singleBidLimit: SINGLE_BID_LIMIT,
         minimumDistinctBids: MIN_DISTINCT_BIDS,
         bondAnnualRate: BANKING_BOND_RATE,
-        decadeYears: BANKING_DECADE_YEARS
+        periodYears: BANKING_PERIOD_YEARS
       },
       banking: {
         interestThreshold: 50,
@@ -1429,7 +1452,7 @@ async function handle(request, response) {
     const session = requireRole(request, response, "participant");
     if (!session) return;
     const store = readStore();
-    if (store.activeRound !== 1 || bankingSetupErrors().length || !currentBankingGroup(store)?.group) {
+    if (store.activeRound !== 1 || bankingSetupErrors().length || !currentBankingPeriod(store)?.period) {
       return sendError(response, 409, "Inter-team loans are available only during an active, configured Round 1.");
     }
     const body = await readJson(request);
@@ -1678,7 +1701,7 @@ async function handle(request, response) {
       if (forceEarlyClose) {
         store.banking.complete = true;
         store.banking.activeEraIndex = companyEraOrder().length;
-        store.banking.decadeIndex = 0;
+        store.banking.periodIndex = 0;
         store.auction = { status: "waiting", era: null, companyId: null };
       }
       store.roundOneCloseout = {
@@ -1698,24 +1721,24 @@ async function handle(request, response) {
 
     if (request.method === "GET" && pathname === "/api/admin/banking") {
       const store = readStore();
-      const current = currentBankingGroup(store);
+      const current = currentBankingPeriod(store);
       return sendJson(response, 200, {
         ready: bankingSetupErrors().length === 0,
         setupErrors: bankingSetupErrors(),
         complete: store.banking.complete,
         fastForwardAvailable: !store.banking.complete && (
           store.banking.activeEraIndex < 2
-          || store.banking.activeEraIndex === 2 && store.banking.decadeIndex < 9
+          || store.banking.activeEraIndex === 2 && store.banking.periodIndex < BANKING_PERIODS_PER_ERA - 1
         ),
         eraIndex: store.banking.activeEraIndex,
-        decadeIndex: store.banking.decadeIndex,
-        current: current?.group ? {
+        periodIndex: store.banking.periodIndex,
+        current: current?.period ? {
           era: current.era,
           eraName: current.eraName,
-          decade: current.group.decade,
-          decadeIndex: current.decadeIndex + 1,
-          decadeCount: current.decadeCount,
-          companies: current.group.companies.map((company) => {
+          period: current.period.period,
+          periodIndex: current.periodIndex + 1,
+          periodCount: current.periodCount,
+          companies: current.period.companies.map((company) => {
             const result = store.results[auctionKey(company.era, company.id)];
             return {
               id: company.id,
@@ -1782,16 +1805,16 @@ async function handle(request, response) {
       return sendJson(response, 200, { loan: sanitizeLoan(loan, "admin") });
     }
 
-    if (request.method === "POST" && pathname === "/api/admin/banking/fast-forward-era-three-final-decade") {
+    if (request.method === "POST" && pathname === "/api/admin/banking/fast-forward-era-three-final-period") {
       const store = readStore();
-      const result = fastForwardToEraThreeFinalDecade(store);
+      const result = fastForwardToEraThreeFinalPeriod(store);
       writeStore(store);
       return sendJson(response, 200, result);
     }
 
-    if (request.method === "POST" && pathname === "/api/admin/banking/settle-decade") {
+    if (request.method === "POST" && pathname === "/api/admin/banking/settle-period") {
       const store = readStore();
-      const settlement = settleBankingDecade(store);
+      const settlement = settleBankingPeriod(store);
       writeStore(store);
       return sendJson(response, 200, { settlement });
     }
@@ -1899,10 +1922,10 @@ async function handle(request, response) {
       if (store.auction.status === "open") {
         return sendError(response, 409, "Close the current company auction before starting another.");
       }
-      const current = currentBankingGroup(store);
-      if (!current?.group || company.era !== current.era
-          || !current.group.companies.some((item) => item.id === company.id)) {
-        return sendError(response, 409, "Only a company in the active decade can be opened.");
+      const current = currentBankingPeriod(store);
+      if (!current?.period || company.era !== current.era
+          || !current.period.companies.some((item) => item.id === company.id)) {
+        return sendError(response, 409, "Only a company in the active period can be opened.");
       }
       if (store.results[auctionKey(company.era, company.id)]) {
         return sendError(response, 409, "This company auction has already closed.");
