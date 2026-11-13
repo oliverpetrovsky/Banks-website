@@ -574,6 +574,15 @@ function advance(state, data, session, market, registeredTeams) {
     for (const key of state.teamOrder) {
       const account = state.teams[key];
       account.cash = market.household.startingCash;
+      account.holdings = {};
+      account.deposits = [];
+      account.debt = 0;
+      account.ledger = [];
+      account.incomeShock = false;
+      account.pendingTermPayout = 0;
+      account.currentInsurance = [];
+      account.nextInsurance = [];
+      account.allocationWindows = {};
       record(account, 1, 0, "opening", account.cash, "Bloodlines starting funds");
     }
     openAllocationWindow(state, 1, "initial");

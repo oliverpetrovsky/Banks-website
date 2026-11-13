@@ -351,11 +351,11 @@ function roundOnePerformance(store) {
       || a.team.localeCompare(b.team));
 }
 
-function roundOneCloseoutError(store) {
-  if (!store.banking.complete) return "Complete all Round 1 eras and decade settlements first.";
+function roundOneCloseoutError(store, allowEarlyClose = false) {
+  if (!allowEarlyClose && !store.banking.complete) return "Complete all Round 1 eras and decade settlements first.";
   if (store.auction.status === "open") return "Close the active company auction before ending Round 1.";
   if (store.teams.length === 0) return "Register at least one team before ending Round 1.";
-  if (store.teams.some((team) => (store.banking.accounts[team.key]?.portfolio || []).length > 0)) {
+  if (!allowEarlyClose && store.teams.some((team) => (store.banking.accounts[team.key]?.portfolio || []).length > 0)) {
     return "Settle all Round 1 company positions before ending the round.";
   }
   return null;
@@ -1579,8 +1579,9 @@ async function handle(request, response) {
           || !Array.isArray(body.qualifierKeys)) {
         return sendError(response, 400, "Select at least one team to qualify for Bloodlines.");
       }
+      const forceEarlyClose = body.forceEarlyClose === true;
       const store = readStore();
-      const reason = roundOneCloseoutError(store);
+      const reason = roundOneCloseoutError(store, forceEarlyClose);
       if (reason) return sendError(response, 409, reason);
       if (store.roundOneCloseout) {
         return sendError(response, 409, "Round 1 has already been closed and its qualifier list is locked.");
@@ -1605,6 +1606,12 @@ async function handle(request, response) {
           loan.closedAt = closedAt;
         }
       }
+      if (forceEarlyClose) {
+        store.banking.complete = true;
+        store.banking.activeEraIndex = companyEraOrder().length;
+        store.banking.decadeIndex = 0;
+        store.auction = { status: "waiting", era: null, companyId: null };
+      }
       store.roundOneCloseout = {
         closedAt,
         qualifierKeys: selectedKeys,
@@ -1615,7 +1622,8 @@ async function handle(request, response) {
         locked: true,
         closedAt: store.roundOneCloseout.closedAt,
         qualifierKeys: selectedKeys,
-        rankings
+        rankings,
+        earlyClose: forceEarlyClose
       });
     }
 

@@ -411,8 +411,9 @@ function renderRoundOneQualification(state) {
     status.textContent = state.available ? "READY TO CLOSE" : "IN PROGRESS";
     message.textContent = state.available
       ? "Select the teams that advance. Ranking adds current Round 1 cash and remaining scheduled loan credits, then subtracts remaining scheduled loan payments. This preview does not transfer money. Defaulted loans are excluded; requests not finally approved expire when Round 1 closes."
-      : state.reason || "Complete all Round 1 eras and decade settlements first.";
-    closeButton.disabled = !state.canClose || adminState.qualificationSelection.size === 0;
+      : "The admin can end Round 1 early at any time. Select the teams that qualify now; the current standings are used immediately and Bloodlines always starts with the event's fixed cash amount.";
+    closeButton.disabled = state.locked || adminState.qualificationSelection.size === 0;
+    closeButton.textContent = state.available ? "END ROUND 1 & LOCK QUALIFIERS" : "END ROUND 1 NOW & LOCK QUALIFIERS";
   }
   document.querySelectorAll("#team-create-form input, #team-create-form button")
     .forEach((control) => { control.disabled = state.locked; });
@@ -737,21 +738,29 @@ async function settleBankingDecade() {
 
 async function closeRoundOne() {
   const button = document.querySelector("#round-one-closeout-submit");
-  if (!adminState.qualificationSelection.size
-      || !window.confirm("End Round 1 and permanently lock this Bloodlines qualifier list?")) return;
+  if (!adminState.qualificationSelection.size) return;
+  const forceEarlyClose = !adminState.qualification?.canClose;
+  const confirmText = forceEarlyClose
+    ? "End Round 1 early and lock the current qualifier list now?"
+    : "End Round 1 and permanently lock this Bloodlines qualifier list?";
+  if (!window.confirm(confirmText)) return;
   button.disabled = true;
   try {
     await api("/api/admin/round-one/close", {
       method: "POST",
-      body: JSON.stringify({ qualifierKeys: [...adminState.qualificationSelection] })
+      body: JSON.stringify({
+        qualifierKeys: [...adminState.qualificationSelection],
+        forceEarlyClose
+      })
     });
     await refreshDashboard();
-    showToast("Round 1 closed; Bloodlines qualifiers are locked.");
+    showToast(forceEarlyClose
+      ? "Round 1 ended early; Bloodlines qualifiers are locked."
+      : "Round 1 closed; Bloodlines qualifiers are locked.");
   } catch (error) {
     showToast(error.message);
   } finally {
-    button.disabled = !adminState.qualification?.canClose
-      || adminState.qualificationSelection.size === 0;
+    button.disabled = adminState.qualification?.locked || adminState.qualificationSelection.size === 0;
   }
 }
 
