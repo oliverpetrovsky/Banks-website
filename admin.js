@@ -150,7 +150,8 @@ function closeAuction() {
 }
 
 function renderTeams(teams) {
-  document.querySelector("#team-count").textContent = String(teams.length);
+  const activeCount = teams.filter((team) => !team.kickedAt).length;
+  document.querySelector("#team-count").textContent = `${activeCount} ACTIVE / ${teams.length}`;
   const list = document.querySelector("#admin-team-list");
   if (teams.length === 0) {
     const empty = document.createElement("li");
@@ -160,9 +161,37 @@ function renderTeams(teams) {
   }
   list.replaceChildren(...teams.map((team) => {
     const item = document.createElement("li");
-    item.textContent = `${team.name} · CASH ${formatRupees(team.balance)}`;
+    item.className = "admin-team-row";
+    const details = document.createElement("span");
+    details.textContent = `${team.name} · CASH ${formatRupees(team.balance)}${team.kickedAt ? " · KICKED" : ""}`;
+    item.append(details);
+    if (!team.kickedAt) {
+      const kickButton = document.createElement("button");
+      kickButton.className = "button button-danger admin-team-kick";
+      kickButton.type = "button";
+      kickButton.textContent = "KICK";
+      kickButton.setAttribute("aria-label", `Kick ${team.name}`);
+      kickButton.addEventListener("click", () => kickTeamAccount(team, kickButton));
+      item.append(kickButton);
+    }
     return item;
   }));
+}
+
+async function kickTeamAccount(team, button) {
+  const confirmed = window.confirm(
+    `Kick ${team.name}? This immediately revokes access and removes the team from future play. Historical results and active loan settlements are retained.`
+  );
+  if (!confirmed) return;
+  button.disabled = true;
+  try {
+    await api(`/api/admin/teams/${encodeURIComponent(team.key)}/kick`, { method: "POST" });
+    showToast(`${team.name} was kicked from the event.`);
+    await refreshDashboard();
+  } catch (error) {
+    showToast(error.message);
+    button.disabled = false;
+  }
 }
 
 function renderBankingProgress(state, auctionStatus) {
@@ -657,7 +686,11 @@ function renderBloodlinesAdmin(state, scoreboard) {
 
 async function refreshBloodlines() {
   try {
-    const state = await api("/api/bloodlines/admin/state");
+    const [state, teamData] = await Promise.all([
+      api("/api/bloodlines/admin/state"),
+      api("/api/admin/teams")
+    ]);
+    renderBloodlinesKickOptions(teamData.teams);
     const scoreboard = state.published || state.completed ? await api("/api/bloodlines/scoreboard") : null;
     renderBloodlinesAdmin(state, scoreboard);
   } catch (error) {
@@ -667,6 +700,43 @@ async function refreshBloodlines() {
       return;
     }
     showToast(error.message);
+  }
+}
+
+function renderBloodlinesKickOptions(teams) {
+  const form = document.querySelector("#bloodlines-team-kick-form");
+  const select = form.elements.teamKey;
+  const previous = select.value;
+  const active = teams.filter((team) => !team.kickedAt);
+  select.replaceChildren(...(active.length ? active.map((team) => {
+    const option = document.createElement("option");
+    option.value = team.key;
+    option.textContent = team.name;
+    return option;
+  }) : [new Option("No active teams", "")]));
+  if (active.some((team) => team.key === previous)) select.value = previous;
+  form.querySelector("button[type=submit]").disabled = active.length === 0;
+}
+
+async function kickBloodlinesTeam(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const teamKey = form.elements.teamKey.value;
+  const team = adminState.data?.teams?.find((item) => item.key === teamKey);
+  const selectedName = team?.name || form.elements.teamKey.selectedOptions[0]?.textContent || "this team";
+  if (!teamKey || !window.confirm(
+    `Kick ${selectedName}? This immediately revokes access and removes the team from future play. Historical results and active loan settlements are retained.`
+  )) return;
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    await api(`/api/admin/teams/${encodeURIComponent(teamKey)}/kick`, { method: "POST" });
+    setFormMessage(form, `${selectedName} was kicked from the event.`);
+    await refreshBloodlines();
+  } catch (error) {
+    setFormMessage(form, error.message, true);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -887,6 +957,7 @@ async function initialize() {
   const newsForm = document.querySelector("#bloodlines-news-form");
   newsForm.addEventListener("input", () => { newsForm.dataset.dirty = "true"; });
   newsForm.addEventListener("submit", releaseBloodlinesNews);
+  document.querySelector("#bloodlines-team-kick-form").addEventListener("submit", kickBloodlinesTeam);
   document.addEventListener("banks-round-change", () => {
     applyRoundMode();
     if (adminState.authenticated) refreshDashboard();

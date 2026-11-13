@@ -318,6 +318,10 @@ function remainingScheduledLoanValue(loan) {
   return total;
 }
 
+function activeTeams(store) {
+  return store.teams.filter((team) => !team.kickedAt);
+}
+
 function roundOnePerformance(store) {
   const teams = new Map(store.teams.map((team) => {
     const account = store.banking.accounts[team.key];
@@ -346,6 +350,7 @@ function roundOnePerformance(store) {
       ...team,
       projectedNet: team.cash + team.projectedCredits - team.projectedDebts
     }))
+    .filter((team) => !store.teams.find((entry) => entry.key === team.teamKey)?.kickedAt)
     .sort((a, b) => b.projectedNet - a.projectedNet
       || b.cash - a.cash
       || a.team.localeCompare(b.team));
@@ -354,8 +359,9 @@ function roundOnePerformance(store) {
 function roundOneCloseoutError(store, allowEarlyClose = false) {
   if (!allowEarlyClose && !store.banking.complete) return "Complete all Round 1 eras and decade settlements first.";
   if (store.auction.status === "open") return "Close the active company auction before ending Round 1.";
-  if (store.teams.length === 0) return "Register at least one team before ending Round 1.";
-  if (!allowEarlyClose && store.teams.some((team) => (store.banking.accounts[team.key]?.portfolio || []).length > 0)) {
+  const teams = activeTeams(store);
+  if (teams.length === 0) return "Keep at least one active team before ending Round 1.";
+  if (!allowEarlyClose && teams.some((team) => (store.banking.accounts[team.key]?.portfolio || []).length > 0)) {
     return "Settle all Round 1 company positions before ending the round.";
   }
   return null;
@@ -715,6 +721,11 @@ function getSession(request) {
     return null;
   }
   if (session.role === "participant" && session.clientIp !== getClientIp(request)) return null;
+  if (session.role === "participant"
+      && !readStore().teams.some((team) => team.key === session.teamKey && !team.kickedAt)) {
+    sessions.delete(token);
+    return null;
+  }
   session.expiresAt = Date.now() + SESSION_TTL_MS;
   return session;
 }
@@ -1253,7 +1264,7 @@ async function handle(request, response) {
     if (isRateLimited(request, identity)) {
       return sendError(response, 429, "Too many sign-in attempts for this team. Try again in 15 minutes.");
     }
-    const team = readStore().teams.find((item) => item.key === name.toLocaleLowerCase("en"));
+    const team = readStore().teams.find((item) => item.key === name.toLocaleLowerCase("en") && !item.kickedAt);
     let valid = false;
     if (team && code && typeof team.salt === "string" && typeof team.codeHash === "string") {
       const expected = Buffer.from(team.codeHash, "hex");
@@ -1337,7 +1348,7 @@ async function handle(request, response) {
         .filter((loan) => loan.borrowerKey === session.teamKey || loan.lenderKey === session.teamKey)
         .map((loan) => sanitizeLoan(loan, session.teamKey))
         .reverse(),
-      counterparties: store.teams
+      counterparties: activeTeams(store)
         .filter((team) => team.key !== session.teamKey)
         .map((team) => ({ key: team.key, name: team.name })),
       lendingCapacity: Math.max(
@@ -1429,7 +1440,7 @@ async function handle(request, response) {
         company: null,
         leaderboard: [],
         myBid: null,
-        participantCount: store.teams.length,
+        participantCount: activeTeams(store).length,
         banking: session.role === "participant"
           ? privateBankingAccount(store, session.teamKey)?.current || null
           : undefined
@@ -1448,7 +1459,7 @@ async function handle(request, response) {
       company: publicCompany(company),
       leaderboard: bids,
       myBid: ownBid ? publicBid(ownBid, company, bids.find((bid) => bid.team === ownBid.team)?.rank || null) : null,
-      participantCount: store.teams.length,
+      participantCount: activeTeams(store).length,
       banking: session.role === "participant"
         ? privateBankingAccount(store, session.teamKey)?.current || null
         : undefined
@@ -1592,7 +1603,7 @@ async function handle(request, response) {
       const uniqueKeys = new Set(body.qualifierKeys);
       if (uniqueKeys.size !== body.qualifierKeys.length || uniqueKeys.size === 0
           || [...uniqueKeys].some((key) => typeof key !== "string"
-            || !store.teams.some((team) => team.key === key))) {
+            || !store.teams.some((team) => team.key === key && !team.kickedAt))) {
         return sendError(response, 400, "Choose one or more registered teams from the performance list.");
       }
       const rankings = roundOnePerformance(store);
@@ -1716,11 +1727,52 @@ async function handle(request, response) {
       return sendJson(response, 200, { settlement });
     }
 
+    const kickTeamMatch = pathname.match(/^\/api\/admin\/teams\/([^/]+)\/kick$/);
+    if (request.method === "POST" && kickTeamMatch) {
+      let teamKey;
+      try {
+        teamKey = decodeURIComponent(kickTeamMatch[1]);
+      } catch {
+        return sendError(response, 400, "Choose a valid team account.");
+      }
+      const store = readStore();
+      const team = store.teams.find((item) => item.key === teamKey);
+      if (!team) return sendError(response, 404, "That team account was not found.");
+      if (team.kickedAt) return sendError(response, 409, "That team has already been kicked.");
+      team.kickedAt = new Date().toISOString();
+      team.kickedBy = "admin";
+      if (store.auction.status === "open") {
+        store.bids = store.bids.filter((bid) => !(bid.teamKey === team.key
+          && bid.era === store.auction.era && bid.companyId === store.auction.companyId));
+      }
+      for (const loan of store.loans) {
+        if ((loan.borrowerKey === team.key || loan.lenderKey === team.key)
+            && (loan.status === "pending_lender" || loan.status === "pending_admin")) {
+          loan.status = "expired_at_team_removal";
+          loan.closedAt = team.kickedAt;
+        }
+      }
+      if (store.roundOneCloseout) {
+        store.roundOneCloseout.qualifierKeys = store.roundOneCloseout.qualifierKeys.filter((key) => key !== team.key);
+      }
+      writeStore(store);
+      for (const [token, session] of sessions) {
+        if (session.role === "participant" && session.teamKey === team.key) sessions.delete(token);
+      }
+      return sendJson(response, 200, {
+        team: team.name,
+        kickedAt: team.kickedAt,
+        activeTeams: activeTeams(store).length
+      });
+    }
+
     if (request.method === "GET" && pathname === "/api/admin/teams") {
       const store = readStore();
       return sendJson(response, 200, {
         teams: store.teams.map((team) => ({
           name: team.name,
+          key: team.key,
+          kickedAt: team.kickedAt || null,
           createdAt: team.createdAt,
           balance: store.banking.accounts[team.key]?.balance ?? VAULT_CAPITAL
         }))
@@ -1800,7 +1852,7 @@ async function handle(request, response) {
       const bids = store.bids.filter((bid) => bid.era === era);
       return sendJson(response, 200, {
         auction: store.auction,
-        teamCount: store.teams.length,
+        teamCount: activeTeams(store).length,
         validBidCount: bids.length,
         leaderboard: eraCompanies.map((company) => ({
           company: publicCompany(company),
@@ -1821,7 +1873,7 @@ async function handle(request, response) {
       return sendError(response, 409, "Round 1 qualifiers have not been selected.");
     }
     const qualifierKeys = new Set(store.roundOneCloseout?.qualifierKeys || []);
-    const eligibleTeams = store.teams.filter((team) => qualifierKeys.has(team.key));
+    const eligibleTeams = store.teams.filter((team) => qualifierKeys.has(team.key) && !team.kickedAt);
     return bloodlines.handle(request, response, pathname, session, eligibleTeams);
   }
   return sendError(response, 404, "Page not found.");

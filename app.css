@@ -124,6 +124,7 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .team-code-result { padding: 11px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--accent-code-border); border-radius: 4px; background: var(--accent-code-surface); color: #d1d0ca; font-size: 9px; line-height: 1.5; }.team-code-result strong { color: var(--accent-code-text); font: 14px var(--mono); overflow-wrap: anywhere; }
 .team-list-heading { margin-top: 17px; padding-top: 13px; display: flex; justify-content: space-between; border-top: 1px solid var(--line); color: var(--muted); font: 7px var(--mono); letter-spacing: .08em; }.team-list-heading strong { color: var(--ink); }
 .simple-list { margin: 8px 0 0; padding: 0; list-style: none; }.simple-list li { padding: 7px 0; border-bottom: 1px solid #2e2e2c; color: var(--smoke); font-size: 10px; }
+.simple-list li.admin-team-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }.admin-team-row > span { min-width: 0; overflow-wrap: anywhere; }.admin-team-kick { min-height: 26px; flex: 0 0 auto; padding: 4px 8px; font-size: 7px; }
 .admin-board-section { margin-top: 28px; }.admin-board-section .public-board-note { margin: 10px 0 14px; }
 .admin-live-board { overflow-x: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }.leaderboard-table { min-width: 530px; }
 .leaderboard-row { min-height: 39px; padding: 9px 13px; display: grid; grid-template-columns: 55px minmax(140px, 1fr) 110px 85px 85px; align-items: center; gap: 10px; border-bottom: 1px solid #30302e; font-size: 9px; }
@@ -174,6 +175,11 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .bloodlines-schedule-range input { min-width: 0; padding: 6px; }
 .bloodlines-returns { margin: 18px 0; padding: 14px; border: 1px solid var(--line); border-radius: 4px; }
 .bloodlines-returns h2 { margin: 0; font-size: 20px; }
+.bloodlines-team-kick { margin: 12px 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 9px; }
+.bloodlines-team-kick label { min-width: 0; }
+.bloodlines-team-kick label > span { display: block; margin-bottom: 6px; color: var(--muted); font: 8px var(--mono); }
+.bloodlines-team-kick select { width: 100%; min-width: 0; padding: 8px; }
+.bloodlines-team-kick .form-message { grid-column: 1 / -1; }
 .bloodlines-return-options { margin: 11px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 7px; }
 .bloodlines-return-option { min-width: 0; padding: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 7px; border: 1px solid var(--line); color: var(--smoke); font-size: 9px; }
 .bloodlines-return-option input { width: 100%; min-width: 0; padding: 6px; }

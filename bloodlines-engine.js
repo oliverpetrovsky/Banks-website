@@ -153,6 +153,20 @@ function ensureRegisteredTeams(state, teams) {
   state.teams = Object.fromEntries(eligibleTeams);
 }
 
+function syncRegisteredTeams(state, teams) {
+  if (!state.started || state.activeStage === "complete") return false;
+  const registeredKeys = new Set(teams.map((team) => team.key));
+  const removedKeys = state.teamOrder.filter((key) => !registeredKeys.has(key));
+  if (!removedKeys.length) return false;
+  state.teamOrder = state.teamOrder.filter((key) => registeredKeys.has(key));
+  if (state.currentSpin && !registeredKeys.has(state.currentSpin.teamKey)) state.currentSpin = null;
+  if (state.activeStage === "wheel" && !state.currentSpin && wheelEntries(state).every((entry) => entry.status === "done")) {
+    state.activeStage = "reallocation";
+    openAllocationWindow(state, state.activeSubround, "reallocation");
+  }
+  return true;
+}
+
 function validateSchedule(schedule) {
   if (!Array.isArray(schedule) || schedule.length !== SUBROUNDS) {
     throw new Error(`Configure exactly ${SUBROUNDS} sub-round year ranges.`);
@@ -749,11 +763,11 @@ async function handle(request, res, pathname, session, registeredTeams = []) {
     ensureRegisteredTeams(state, registeredTeams);
     writeStore(state);
   }
+  if (state.started && syncRegisteredTeams(state, registeredTeams)) writeStore(state);
   if (state.currentSpin && completeSpin(state, market)) writeStore(state);
   const eligibleKeys = new Set(registeredTeams.map((team) => team.key));
   if (state.started && !publicScoreboard
-      && (state.teamOrder.some((key) => !eligibleKeys.has(key))
-        || registeredTeams.some((team) => !state.teams[team.key]))) {
+      && registeredTeams.some((team) => !state.teams[team.key])) {
     sendJson(res, 409, { error: "Bloodlines was started with a different team roster. Reset its saved game before starting the qualified roster." });
     return true;
   }
@@ -779,7 +793,7 @@ async function handle(request, res, pathname, session, registeredTeams = []) {
           : null
       } : null,
       teams: state.published
-        ? state.teamOrder.filter((key) => eligibleKeys.has(key))
+        ? state.teamOrder.filter((key) => state.completed || eligibleKeys.has(key))
           .map((key) => ({ team: state.teams[key].name, score: Math.round(netWorth(state.teams[key], market) * 100) / 100 }))
           .sort((a, b) => b.score - a.score)
         : []

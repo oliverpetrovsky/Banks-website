@@ -104,6 +104,11 @@
             <div><span class="panel-index">TEAMS SUBMITTED</span><strong id="bloodlines-admin-submissions">—</strong></div>
           </div>
           <p id="bloodlines-admin-message" class="public-board-note">Set the nine year ranges, then start the simulation. Each sub-round covers a contiguous portion of the 80-year timeline.</p>
+          <form id="bloodlines-team-kick-form" class="bloodlines-team-kick">
+            <label><span>REMOVE A TEAM FROM THE EVENT</span><select name="teamKey" required></select></label>
+            <button class="button button-danger" type="submit">KICK TEAM</button>
+            <p class="form-message" aria-live="polite"></p>
+          </form>
           <form id="bloodlines-schedule-form" class="bloodlines-schedule" hidden>
             <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> SIMULATION CONFIGURATION</p><h2>Sub-round year ranges</h2></div></div>
             <p class="public-board-note">Ranges must be consecutive and cover Years 1–80 exactly.</p>

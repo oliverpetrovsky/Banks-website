@@ -59,7 +59,7 @@ Open `http://localhost:3000`. The public leaderboard only shows results after an
 ## Event setup
 
 1. Open `/admin` and sign in with `ADMIN_PASSWORD`.
-2. The 41 registered accounts are preloaded from the private roster file. Distribute each team's one-time access code privately; create any additional accounts before locking Round 1 qualifiers.
+2. The 41 registered accounts are preloaded from the private roster file. Distribute each team's one-time access code privately; create any additional accounts before locking Round 1 qualifiers. Use **KICK** beside a team in Round 1 or the team selector in Bloodlines to revoke access. Kicks remove an open bid and expire pending loan requests; closed results and active loan schedules remain in the record.
 3. Round 1 runs through each era's ten decade groups in year-range order. Start and close each company auction in the active decade, then settle the decade before the next one opens.
 4. Participants open `/team` and sign in with their team name and access code. Their BVI and estimated rank recalculate as they edit principal and interest. Offers cannot exceed their available cash.
 5. Only the active company is sent to participants. Upcoming company details are served only to signed-in admins.
