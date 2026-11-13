@@ -424,7 +424,7 @@ function renderRoundOneQualification(state) {
     checkbox.type = "checkbox";
     checkbox.dataset.qualifierKey = team.teamKey;
     checkbox.checked = adminState.qualificationSelection.has(team.teamKey);
-    checkbox.disabled = state.locked || !state.canClose;
+    checkbox.disabled = state.locked;
     const rank = document.createElement("strong");
     rank.textContent = String(index + 1).padStart(2, "0");
     const name = document.createElement("strong");
@@ -504,14 +504,16 @@ function renderBloodlinesAdmin(state, scoreboard) {
     : state.completed
       ? "All 80 simulation years are complete. Publish the final scoreboard when ready."
       : state.started
-        ? state.stage === "news"
-          ? `Release one shared news flash per year. ${state.newsRemaining} year${state.newsRemaining === 1 ? "" : "s"} remain in this sub-round.`
-          : state.stage === "wheel"
-            ? "Spin teams one at a time. Participants see the active spin and each completed outcome live."
-            : state.stage === "reallocation"
-              ? "Every team must save a post-Wheel reallocation before this sub-round can close."
-              : "Collect each team's initial allocation before opening the annual news sequence."
-        : "Configure nine consecutive year ranges that cover Years 1–80, then start with the registered teams.";
+          ? state.stage === "allocation" && !state.returnsConfigured
+            ? "Set annual returns for every investment option before teams can allocate."
+            : state.stage === "news"
+              ? `Release one shared news flash per year. ${state.newsRemaining} year${state.newsRemaining === 1 ? "" : "s"} remain in this sub-round.`
+              : state.stage === "wheel"
+                ? "Spin teams one at a time. Participants see the active spin and each completed outcome live."
+                : state.stage === "reallocation"
+                  ? "Every team must save a post-Wheel reallocation before this sub-round can close."
+                  : "Set annual returns before the first team allocates; then collect allocations to open the news sequence."
+          : "Configure the year ranges and first sub-round returns before starting with the registered teams.";
 
   const controls = {
     start: !state.started,
@@ -523,7 +525,9 @@ function renderBloodlinesAdmin(state, scoreboard) {
   };
   document.querySelectorAll("[data-bloodlines-action]").forEach((button) => {
     button.hidden = !controls[button.dataset.bloodlinesAction];
-    button.disabled = button.dataset.bloodlinesAction === "spin_next" && Boolean(state.wheel.current);
+    button.disabled = button.dataset.bloodlinesAction === "spin_next"
+      ? Boolean(state.wheel.current)
+      : button.dataset.bloodlinesAction === "start" && !state.returnsConfigured;
   });
 
   const scheduleForm = document.querySelector("#bloodlines-schedule-form");
@@ -553,9 +557,49 @@ function renderBloodlinesAdmin(state, scoreboard) {
       return row;
     }));
   }
+  const returnsForm = document.querySelector("#bloodlines-returns-form");
+  returnsForm.hidden = state.returnsLocked;
+  const returnsLocked = document.querySelector("#bloodlines-returns-locked");
+  returnsLocked.hidden = state.stage !== "allocation" || !state.returnsLocked;
+  returnsLocked.textContent = "Returns are locked because a team has already submitted this sub-round's allocation.";
+  const returnOptions = document.querySelector("#bloodlines-return-options");
+  if (!returnsForm.dataset.dirty) {
+    returnOptions.replaceChildren(...state.instruments.map((instrument) => {
+      const label = document.createElement("label");
+      label.className = "bloodlines-return-option";
+      const caption = document.createElement("span");
+      caption.textContent = `${instrument.name} · annual %`;
+      const input = document.createElement("input");
+      input.type = "number";
+      input.name = `return-${instrument.id}`;
+      input.min = "-99.99";
+      input.max = "1000";
+      input.step = "0.01";
+      input.required = true;
+      input.value = state.annualReturns?.[instrument.id] ?? "";
+      input.dataset.returnInstrument = instrument.id;
+      input.setAttribute("aria-label", `${instrument.name} annual return percentage`);
+      label.append(caption, input);
+      return label;
+    }));
+  }
   const newsForm = document.querySelector("#bloodlines-news-form");
   newsForm.hidden = !state.started || state.stage !== "news" || state.newsRemaining === 0;
   document.querySelector("#bloodlines-news-label").textContent = `YEAR ${state.year} NEWS FLASH`;
+  const newsOptions = document.querySelector("#bloodlines-news-options");
+  if (!newsForm.dataset.dirty) {
+    newsOptions.replaceChildren(...state.instruments.map((instrument) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.name = "affectedInstrumentIds";
+      input.value = instrument.id;
+      const caption = document.createElement("span");
+      caption.textContent = instrument.name;
+      label.append(input, caption);
+      return label;
+    }));
+  }
 
   const scoreByTeam = new Map((scoreboard?.teams || []).map((team) => [team.team, team.score]));
   const teamList = document.querySelector("#bloodlines-admin-teams");
@@ -662,6 +706,26 @@ async function saveBloodlinesSchedule(event) {
   }
 }
 
+async function saveBloodlinesReturns(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const returns = Object.fromEntries([...form.querySelectorAll("[data-return-instrument]")].map((input) => [
+    input.dataset.returnInstrument,
+    Number(input.value)
+  ]));
+  try {
+    await api("/api/bloodlines/admin/advance", {
+      method: "POST",
+      body: JSON.stringify({ action: "configure_returns", returns })
+    });
+    form.dataset.dirty = "";
+    setFormMessage(form, "Annual returns saved for this sub-round.");
+    await refreshBloodlines();
+  } catch (error) {
+    setFormMessage(form, error.message, true);
+  }
+}
+
 async function releaseBloodlinesNews(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -670,9 +734,15 @@ async function releaseBloodlinesNews(event) {
   try {
     await api("/api/bloodlines/admin/advance", {
       method: "POST",
-      body: JSON.stringify({ action: "release_news", text: form.elements.text.value })
+      body: JSON.stringify({
+        action: "release_news",
+        text: form.elements.text.value,
+        effect: form.elements.effect.value,
+        affectedInstrumentIds: [...form.querySelectorAll("[name=affectedInstrumentIds]:checked")].map((input) => input.value)
+      })
     });
     form.reset();
+    form.dataset.dirty = "";
     setFormMessage(form, "News released to all teams.");
     await refreshBloodlines();
   } catch (error) {
@@ -811,7 +881,12 @@ async function initialize() {
   const scheduleForm = document.querySelector("#bloodlines-schedule-form");
   scheduleForm.addEventListener("input", () => { scheduleForm.dataset.dirty = "true"; });
   scheduleForm.addEventListener("submit", saveBloodlinesSchedule);
-  document.querySelector("#bloodlines-news-form").addEventListener("submit", releaseBloodlinesNews);
+  const returnsForm = document.querySelector("#bloodlines-returns-form");
+  returnsForm.addEventListener("input", () => { returnsForm.dataset.dirty = "true"; });
+  returnsForm.addEventListener("submit", saveBloodlinesReturns);
+  const newsForm = document.querySelector("#bloodlines-news-form");
+  newsForm.addEventListener("input", () => { newsForm.dataset.dirty = "true"; });
+  newsForm.addEventListener("submit", releaseBloodlinesNews);
   document.addEventListener("banks-round-change", () => {
     applyRoundMode();
     if (adminState.authenticated) refreshDashboard();

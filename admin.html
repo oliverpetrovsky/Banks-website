@@ -111,6 +111,14 @@
             <button class="button button-outline" type="submit">SAVE YEAR RANGES</button>
             <p class="form-message" aria-live="polite"></p>
           </form>
+          <form id="bloodlines-returns-form" class="bloodlines-returns" hidden>
+            <div class="public-board-heading"><div><p class="eyebrow"><span class="eyebrow-line"></span> MARKET SETUP</p><h2>Sub-round annual returns</h2></div></div>
+            <p class="public-board-note">Set an annual percentage for every investment option. Market returns apply each simulation year; fixed-deposit rates apply to new deposits.</p>
+            <div id="bloodlines-return-options" class="bloodlines-return-options"></div>
+            <button class="button button-outline" type="submit">SAVE RETURNS FOR SUB-ROUND</button>
+            <p class="form-message" aria-live="polite"></p>
+          </form>
+          <p id="bloodlines-returns-locked" class="public-board-note" hidden></p>
           <div class="button-row bloodlines-admin-controls">
             <button class="button button-primary" type="button" data-bloodlines-action="start">START SIMULATION</button>
             <button class="button button-outline" type="button" data-bloodlines-action="begin_news">OPEN NEWS SEQUENCE</button>
@@ -121,6 +129,8 @@
           </div>
           <form id="bloodlines-news-form" class="bloodlines-news-control" hidden>
             <label><span id="bloodlines-news-label">NEWS FLASH</span><textarea name="text" maxlength="500" required placeholder="Write the event news for this simulation year"></textarea></label>
+            <label><span>WHAT DOES THIS NEWS AFFECT?</span><input name="effect" maxlength="300" required placeholder="Describe the investment impact"></label>
+            <fieldset class="bloodlines-impact-options"><legend>AFFECTED INVESTMENT OPTIONS</legend><div id="bloodlines-news-options"></div></fieldset>
             <button class="button button-primary" type="submit">RELEASE NEWS &amp; ADVANCE YEAR</button>
             <p class="form-message" aria-live="polite"></p>
           </form>

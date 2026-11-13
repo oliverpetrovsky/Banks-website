@@ -1564,7 +1564,7 @@ async function handle(request, response) {
       const closeout = store.roundOneCloseout;
       return sendJson(response, 200, {
         available: Boolean(closeout) || !reason,
-        canClose: !closeout && !reason,
+        canClose: !closeout,
         reason: closeout ? null : reason,
         locked: Boolean(closeout),
         closedAt: closeout?.closedAt || null,

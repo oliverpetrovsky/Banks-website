@@ -476,7 +476,7 @@ function renderBloodlines(state, draftOverride = null) {
     ? `${state.stageName.replaceAll("_", " ").toUpperCase()}`
     : "WAITING";
   notice.textContent = state.started
-    ? `Annual salary ${formatBloodlinesValue(state.current.salary)} · household expenses ${formatBloodlinesValue(state.current.expenses)} · ${state.status === "trading" ? "Allocation is open; save or update your portfolio." : `Simulation Year ${state.year} · decisions are locked until the next allocation window.`}`
+    ? `Annual salary ${formatBloodlinesValue(state.current.salary)} · household expenses ${formatBloodlinesValue(state.current.expenses)} · ${state.status === "trading" ? "Allocation is open; save or update your portfolio." : state.stage === "allocation" ? "Waiting for the admin to set this sub-round's returns before allocations open." : `Simulation Year ${state.year} · decisions are locked until the next allocation window.`}`
     : "Your household ledger and investment decisions will appear when the admin starts Bloodlines.";
   document.querySelector("#bloodlines-coverage").textContent = state.started
     ? `ACTIVE INSURANCE · ${state.coverage.length ? state.coverage.join(" · ") : "No active cover"}`
@@ -507,12 +507,35 @@ function renderBloodlines(state, draftOverride = null) {
     number.textContent = `YEAR ${String(item.year).padStart(2, "0")}`;
     const text = document.createElement("p");
     text.textContent = item.text;
-    article.append(number, text);
+    const effect = document.createElement("p");
+    effect.className = "bloodlines-news-effect";
+    effect.textContent = `EFFECT · ${item.effect || "No effect details provided"}`;
+    const affectedNames = (item.affectedInstrumentIds || []).map((id) => (
+      state.instruments.find((instrument) => instrument.id === id)?.name
+    )).filter(Boolean);
+    const affected = document.createElement("span");
+    affected.className = "bloodlines-news-targets";
+    affected.textContent = `AFFECTS · ${affectedNames.join(" · ") || "Not specified"}`;
+    article.append(number, text, effect, affected);
     news.append(article);
   }
   const market = document.querySelector("#bloodlines-market");
-  market.hidden = !state.market;
+  market.hidden = !state.started;
   market.replaceChildren();
+  if (state.started) {
+    const returnHeading = document.createElement("strong");
+    returnHeading.textContent = `SUB-ROUND ${state.subround} ANNUAL RETURNS`;
+    const returns = document.createElement("div");
+    returns.className = "bloodlines-market-prices";
+    for (const instrument of state.instruments) {
+      const item = document.createElement("span");
+      const annualReturn = Number(state.annualReturns?.[instrument.id]);
+      const label = instrument.type === "fd" ? "annual FD rate" : "annual return";
+      item.textContent = `${instrument.name} · ${Number.isFinite(annualReturn) ? `${annualReturn > 0 ? "+" : ""}${annualReturn.toFixed(2)}% ${label}` : "return not set"}`;
+      returns.append(item);
+    }
+    market.append(returnHeading, returns);
+  }
   if (state.market) {
     const heading = document.createElement("strong");
     heading.textContent = `YEAR ${state.market.year} MARKET PRICES`;

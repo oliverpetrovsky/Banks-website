@@ -150,6 +150,8 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .bloodlines-news article { padding: 12px; border: 1px solid var(--line); border-radius: 4px; background: #171716; }
 .bloodlines-news article span, .bloodlines-insurance legend, .bloodlines-admin-team > span { color: var(--gold); font: 7px var(--mono); letter-spacing: .07em; }
 .bloodlines-news p { margin: 7px 0 0; color: var(--smoke); font-size: 10px; line-height: 1.6; }
+.bloodlines-news .bloodlines-news-effect { color: var(--ink); }
+.bloodlines-news .bloodlines-news-targets { display: block; margin-top: 8px; color: var(--yellow); line-height: 1.5; }
 .bloodlines-wheel { margin: 13px 0; padding: 12px; border: 1px solid var(--accent-card-border); border-radius: 4px; background: var(--accent-card-surface); color: var(--yellow); font: 9px var(--mono); }
 .bloodlines-wheel-status { display: flex; align-items: center; gap: 12px; }.bloodlines-wheel-status p { color: var(--ink); font-size: 10px; }
 .wheel-spinner { width: 37px; height: 37px; flex: 0 0 37px; display: inline-block; border: 2px solid #6f2a22; border-radius: 50%; background: conic-gradient(from 0deg, #ed673f 0 12%, #321a18 12% 25%, #f0ad55 25% 37%, #321a18 37% 50%, #ed673f 50% 62%, #321a18 62% 75%, #f0ad55 75% 87%, #321a18 87%); box-shadow: inset 0 0 0 5px #171716; }
@@ -170,9 +172,19 @@ input::placeholder { color: #777772; }input:focus, select:focus { border-color: 
 .bloodlines-schedule-range { min-width: 0; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; border: 1px solid var(--line); }
 .bloodlines-schedule-range > span { grid-column: 1 / -1; color: var(--muted); font: 7px var(--mono); }
 .bloodlines-schedule-range input { min-width: 0; padding: 6px; }
+.bloodlines-returns { margin: 18px 0; padding: 14px; border: 1px solid var(--line); border-radius: 4px; }
+.bloodlines-returns h2 { margin: 0; font-size: 20px; }
+.bloodlines-return-options { margin: 11px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 7px; }
+.bloodlines-return-option { min-width: 0; padding: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 7px; border: 1px solid var(--line); color: var(--smoke); font-size: 9px; }
+.bloodlines-return-option input { width: 100%; min-width: 0; padding: 6px; }
 .bloodlines-news-control { margin: 14px 0; padding: 13px; display: grid; gap: 9px; border: 1px solid var(--line); border-radius: 4px; }
 .bloodlines-news-control textarea { width: 100%; min-height: 78px; padding: 9px; resize: vertical; }
 .bloodlines-news-control label > span { display: block; margin-bottom: 6px; color: var(--muted); font: 8px var(--mono); }
+.bloodlines-impact-options { min-width: 0; margin: 0; padding: 9px; border: 1px solid var(--line); }
+.bloodlines-impact-options legend { padding: 0 5px; color: var(--muted); font: 8px var(--mono); }
+.bloodlines-impact-options > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 7px; }
+.bloodlines-impact-options label { min-width: 0; display: flex; align-items: flex-start; gap: 7px; color: var(--smoke); font-size: 9px; line-height: 1.4; }
+.bloodlines-impact-options input { flex: 0 0 auto; margin: 1px 0 0; accent-color: var(--yellow); }
 .bloodlines-market { margin: 12px 0; padding: 11px; border: 1px solid var(--line); border-radius: 4px; background: #171716; }
 .bloodlines-market > strong { color: var(--yellow); font: 8px var(--mono); }
 .bloodlines-market-prices { margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }

@@ -76,13 +76,14 @@ Bloodlines guides each household through an 80-year simulation split into nine a
 
 Each sub-round follows the same sequence:
 
-1. Teams submit an opening allocation. Portfolios, cash, debt, and insurance carry forward.
-2. The admin opens the news sequence and releases one news flash per simulation year. Each release processes that year's salary, expenses, dividends, deposit maturities, and debt interest, and reveals the year's market prices to all teams.
-3. The admin starts the Wheel and triggers one team's digital spin at a time. Teams see the active spin live and each result after it lands; an outcome remains hidden until then. Outcomes are independently randomized for each team.
-4. Teams submit a reallocation after seeing the Wheel consequence.
-5. The admin closes the sub-round to open the next one. After the ninth sub-round, the admin publishes the final net-worth leaderboard.
+1. Before the first team allocates, the admin sets an annual return for every investment option. Market returns determine each year's asset prices during that sub-round; fixed-deposit rates apply only to new deposits. Returns lock after the first allocation is submitted.
+2. Teams submit an opening allocation. Portfolios, cash, debt, and insurance carry forward.
+3. The admin opens the news sequence and releases one news flash per simulation year, including a written effect and the affected investment options. Each release processes that year's salary, expenses, dividends, deposit maturities, and debt interest, and reveals the year's market prices and shared news to all teams.
+4. The admin starts the Wheel and triggers one team's digital spin at a time. Teams see the active spin live and each result after it lands; an outcome remains hidden until then. Outcomes are independently randomized for each team.
+5. Teams submit a reallocation after seeing the Wheel consequence.
+6. The admin closes the sub-round. The next sub-round opens with its own annual return setup before teams allocate again. After the ninth sub-round, the admin publishes the final net-worth leaderboard.
 
-The admin controls each step at `/admin` after selecting Round 2. Teams sign in at `/team` to see their private portfolio, the shared news and market disclosures, Wheel progress, and their allocation form during the two allocation windows. The public leaderboard only shows Bloodlines results after the admin publishes them.
+The admin controls each step at `/admin` after selecting Round 2. Teams sign in at `/team` to see their private portfolio, each sub-round's annual returns, news effects and affected investments, market disclosures, Wheel progress, and their allocation form during the two allocation windows. The public leaderboard only shows Bloodlines results after the admin publishes them.
 
 The fictional `data/bloodlines-test-market.json` is for testing only. It uses deterministic `{ "start": number, "annualGrowth": number }` series, expanded to 80 annual values by the server. An event market file can instead provide exactly 80 positive values for each equity and fund under `prices.equities` and `prices.funds`, 80 values in `prices.gold`, and 80 values each for `household.salary` and `household.expenses`. It must also include `household.startingCash`. Keep actual event data in a private file and set `BLOODLINES_MARKET_FILE` to its path; never commit real market, household, or event data. Bloodlines state is stored separately in `.data/bloodlines.json` by default; set `BLOODLINES_STORE_FILE` to change it. The new simulation flow uses a different save schema from the earlier four-year version: back up the old file and move it aside before starting this version. As with Round 1, Render's free filesystem is ephemeral and is unsuitable for a live event.
 
