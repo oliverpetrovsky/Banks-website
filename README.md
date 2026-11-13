@@ -6,7 +6,7 @@ Only a signed-in admin can switch the active event between Round 1, **The Bankin
 
 The app loads fictional companies from `data/test.json` by default. Event-specific company data is intentionally excluded from the public repository. When the approved event dataset is ready, keep it in a private local file and select it with `COMPANIES_FILE`.
 
-For initial team accounts, place a private file at `data/initial-teams.json` and set `INITIAL_TEAMS_FILE=data/initial-teams.json`. It is ignored by Git. The file must contain a JSON array with `name` and `accessCode` for each team. Access codes must be at least 12 characters:
+For local initial team accounts, place a private file at `data/initial-teams.json` and set `INITIAL_TEAMS_FILE=data/initial-teams.json`. It is ignored by Git. The file must contain a JSON array with `name` and `accessCode` for each team. Access codes must be at least 12 characters:
 
 ```json
 [
@@ -20,14 +20,31 @@ Each team account can have active sessions from only one client IP at a time. Lo
 
 The participant leaderboard shows team names, ranks, and BVI scores, but hides other teams' principal and interest offers. A team sees its own submitted offer, and admins can see all submitted offer details.
 
-## Deploy a test instance on Render
+## Deploy the final event on Render
 
-1. Push this repository to GitHub. Confirm `data/companies.json` is not tracked; the Render Blueprint uses only the fictional `data/test.json`.
-2. In Render, choose **New → Blueprint**, connect `oliverpetrovsky/Banks-website`, and deploy the `render.yaml` Blueprint.
-3. Render generates a private `ADMIN_PASSWORD`, enables secure session cookies, and seeds three dummy test teams. Find the admin password in the service's environment settings; test team names and access codes are listed in `data/test-teams.json`.
-4. Open the deployed service URL. The public page is `/`, the team panel is `/team`, and administration is `/admin`.
+Deploy from the repository root. The `final-site/` folder is Git-ignored and is only a local copy; Render will not deploy it from Git. The root `render.yaml` defines a paid Node web service and a 1 GB persistent disk mounted at `/var/data`. Render charges for the paid service and disk. A disk-backed service runs one instance and has brief downtime during deploys.
 
-The Blueprint uses Render's free instance for testing. Its local JSON store is ephemeral: team accounts, bids, and auction state can be lost when Render restarts or redeploys the service. Admin and team sessions also expire on restarts. Do not use this deployment for a live event or real company data. Persistent storage requires a paid Render disk or replacing the JSON store with a managed database.
+Before creating the Render service:
+
+1. Push the updated repository to GitHub. Do not add company data, team access codes, market data, or the private access-code CSV to Git.
+2. Prepare a private `bloodlines-market.json` using real event assumptions. It must include 80 positive annual values for each equity and fund in `prices.equities` and `prices.funds`, 80 values in `prices.gold`, 80 salary values, 80 expense values, and `household.startingCash`. `data/bloodlines-test-market.json` is synthetic test data and must not be used for the live event.
+
+Create the service and upload its private inputs:
+
+1. In Render, choose **New → Blueprint**, connect this repository and the branch you pushed, then apply `render.yaml`. The service may fail its first start until its secret files are added.
+2. In the new service's **Environment → Secret Files**, add these files with the exact filenames shown:
+  - `real-company-list.json`, from local `final-site/data/real-company-list.json`.
+  - `initial-teams.json`, from local `final-site/data/initial-teams.json`. This contains the 41 team access codes; keep it private.
+  - `bloodlines-market.json`, the real event market file prepared above.
+3. In **Environment Variables**, set a new strong `ADMIN_PASSWORD` of at least 12 characters. Render generates one for a new service, but explicitly replace it if reusing an existing service. Do not reuse the previously exposed password. Leave `COOKIE_SECURE=1` enabled.
+4. Save changes and redeploy. The Blueprint points all three inputs to `/etc/secrets/` and stores Round 1 data at `/var/data/bids.json` and Bloodlines data at `/var/data/bloodlines.json` on the persistent disk.
+
+Verify the deployment before the event:
+
+1. Confirm `/healthz` responds successfully, then sign in at `/admin` with the new admin password. Opening the admin dashboard initializes the 41 team accounts once; later changes to `initial-teams.json` do not overwrite existing accounts.
+2. Privately distribute login codes from local `final-site/data/initial-team-access-codes.csv`. Never upload or commit that CSV.
+3. Test one team login, verify the company list and Bloodlines salary/expense assumptions, and confirm the admin can set returns before starting Bloodlines. Complete Round 1 and lock qualifiers before switching to Round 2.
+4. Back up `/var/data/bids.json` and `/var/data/bloodlines.json` before and after the event. Keep the Render disk attached; without it, event data is ephemeral.
 
 ## Run locally
 
@@ -42,7 +59,7 @@ Open `http://localhost:3000`. The public leaderboard only shows results after an
 ## Event setup
 
 1. Open `/admin` and sign in with `ADMIN_PASSWORD`.
-2. Create an account for each registered team. Give each team its name and one-time access code privately; the code is only displayed when the account is created.
+2. The 41 registered accounts are preloaded from the private roster file. Distribute each team's one-time access code privately; create any additional accounts before locking Round 1 qualifiers.
 3. Round 1 runs through each era's ten decade groups in year-range order. Start and close each company auction in the active decade, then settle the decade before the next one opens.
 4. Participants open `/team` and sign in with their team name and access code. Their BVI and estimated rank recalculate as they edit principal and interest. Offers cannot exceed their available cash.
 5. Only the active company is sent to participants. Upcoming company details are served only to signed-in admins.
@@ -89,4 +106,4 @@ The fictional `data/bloodlines-test-market.json` is for testing only. It uses de
 
 ## Before the event
 
-This is a first version for a controlled event deployment. Team access codes should be shared privately. Set a strong admin password, use HTTPS outside a trusted local network, and back up the `.data` directory. The access codes are hashed, but there is no self-service account recovery. The site currently uses synthetic companies until the organizers approve and install the real event data.
+This is a first version for a controlled event deployment. The local app defaults to synthetic company and market data; the Render setup uses the private company and market files you upload. Team access codes should be shared privately. Set a strong admin password, use HTTPS outside a trusted local network, and back up the persistent data directory. The access codes are hashed, but there is no self-service account recovery.

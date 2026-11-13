@@ -1,8 +1,8 @@
 services:
   - type: web
-    name: banks-bloodlines-test
+    name: banks-bloodlines-event
     runtime: node
-    plan: free
+    plan: 0.5c-512mb
     buildCommand: node --check server.js && node --check public.js && node --check admin.js && node --check team.js && node --check round-switcher.js && node --check bloodlines-engine.js
     startCommand: node server.js
     healthCheckPath: /healthz
@@ -11,7 +11,17 @@ services:
         generateValue: true
       - key: COOKIE_SECURE
         value: "1"
+      - key: COMPANIES_FILE
+        value: /etc/secrets/real-company-list.json
       - key: INITIAL_TEAMS_FILE
-        value: data/test-teams.json
+        value: /etc/secrets/initial-teams.json
       - key: BLOODLINES_MARKET_FILE
-        value: data/bloodlines-test-market.json
+        value: /etc/secrets/bloodlines-market.json
+      - key: BIDS_FILE
+        value: /var/data/bids.json
+      - key: BLOODLINES_STORE_FILE
+        value: /var/data/bloodlines.json
+    disk:
+      name: banks-bloodlines-event-data
+      mountPath: /var/data
+      sizeGB: 1

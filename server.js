@@ -63,7 +63,7 @@ function loadInitialTeams() {
     const name = typeof entry.name === "string" ? entry.name.trim().replace(/\s+/g, " ") : "";
     const accessCode = typeof entry.accessCode === "string" ? entry.accessCode.trim() : "";
     const key = name.toLocaleLowerCase("en");
-    if (!/^[\p{L}\p{N}][\p{L}\p{N} '&.-]{1,34}$/u.test(name)) {
+    if (!/^[\p{L}\p{N}][\p{L}\p{N} '&.,-]{1,34}$/u.test(name)) {
       throw new Error(`Initial teams file ${file}: team ${index + 1} needs a name between 2 and 35 characters.`);
     }
     if (!accessCode || accessCode.length < 12) {
@@ -1730,7 +1730,7 @@ async function handle(request, response) {
     if (request.method === "POST" && pathname === "/api/admin/teams") {
       const body = await readJson(request);
       const name = typeof body.name === "string" ? body.name.trim().replace(/\s+/g, " ") : "";
-      if (!/^[\p{L}\p{N}][\p{L}\p{N} '&.-]{1,34}$/u.test(name)) {
+      if (!/^[\p{L}\p{N}][\p{L}\p{N} '&.,-]{1,34}$/u.test(name)) {
         return sendError(response, 400, "Enter a team name between 2 and 35 characters.");
       }
       const store = readStore();
