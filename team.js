@@ -75,6 +75,10 @@ function renderBankingAccount(banking) {
   const portfolio = document.querySelector("#banking-account-portfolio");
   const ledger = document.querySelector("#banking-account-ledger");
   if (!banking) return;
+  const settlementNote = document.querySelector("#banking-settlement-note");
+  if (settlementNote) {
+    settlementNote.textContent = "Settlements occur at the end of each decade and again at the end of each era.";
+  }
   period.textContent = banking.current
     ? `${banking.current.eraName} · ${banking.current.decade || "Era settlement"} · decade ${banking.current.decadeIndex}/${banking.current.decadeCount}`
     : "All eras complete";
@@ -86,7 +90,7 @@ function renderBankingAccount(banking) {
   if (!positions.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "No company positions yet. Uninvested cash compounds at 6% annually.";
+    empty.textContent = "No company positions yet. Uninvested cash compounds at 4% annually.";
     portfolio.replaceChildren(empty);
   } else {
     portfolio.replaceChildren(...positions.slice(-12).reverse().map((position) => {
@@ -105,7 +109,7 @@ function renderBankingAccount(banking) {
     const item = document.createElement("li");
     const amount = entry.amount >= 0 ? `+${formatRupees(entry.amount)}` : formatRupees(entry.amount);
     const source = entry.type === "bond"
-      ? `6% bond growth · ${entry.decade}`
+      ? `4% bond growth · ${entry.decade}`
       : entry.type === "company-interest"
         ? `Company interest · ${entry.companyId}`
         : entry.type === "loan-funded"

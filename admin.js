@@ -192,7 +192,7 @@ function renderBankingProgress(state, auctionStatus) {
     progress.textContent = `DECADE ${String(state.current.decadeIndex).padStart(2, "0")} / ${state.current.decadeCount}`;
     const pending = state.current.companies.filter((company) => !company.auctioned).length;
     message.textContent = state.ready
-      ? `${pending} company auction${pending === 1 ? "" : "s"} remain in this decade. Idle cash compounds at 6% annually; decade interest and NPI settle after every company closes.`
+      ? `${pending} company auction${pending === 1 ? "" : "s"} remain in this decade. Idle cash compounds at 4% annually; decade interest and NPI settle after every company closes.`
       : "Correct the company dataset errors before opening or settling auctions.";
   }
   teams.replaceChildren(...state.teams.map((team) => {
