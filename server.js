@@ -1092,6 +1092,64 @@ function settleBankingDecade(store) {
   return settlement;
 }
 
+function fastForwardToEraThreeFinalDecade(store) {
+  const setupErrors = bankingSetupErrors();
+  if (setupErrors.length) {
+    throw Object.assign(new Error(setupErrors.join(" ")), { status: 409 });
+  }
+  if (store.auction.status === "open") {
+    throw Object.assign(new Error("Close the current company auction before fast-forwarding."), { status: 409 });
+  }
+  const eras = companyEraOrder();
+  if (eras.length !== 3 || decadesForEra(eras[2]).length !== 10) {
+    throw Object.assign(new Error("Fast-forward requires exactly three eras with ten decades in Era 3."), { status: 409 });
+  }
+  const targetEraIndex = 2;
+  const targetDecadeIndex = 9;
+  if (store.banking.complete || store.banking.activeEraIndex > targetEraIndex
+      || store.banking.activeEraIndex === targetEraIndex && store.banking.decadeIndex >= targetDecadeIndex) {
+    throw Object.assign(new Error("Round 1 is already at or beyond Era 3's final decade."), { status: 409 });
+  }
+
+  const skipped = [];
+  while (store.banking.activeEraIndex < targetEraIndex
+      || store.banking.activeEraIndex === targetEraIndex && store.banking.decadeIndex < targetDecadeIndex) {
+    const current = currentBankingGroup(store);
+    if (!current?.group) {
+      throw Object.assign(new Error("Could not find the next decade to fast-forward."), { status: 409 });
+    }
+    const closedAt = new Date().toISOString();
+    for (const company of current.group.companies) {
+      const key = auctionKey(company.era, company.id);
+      if (store.results[key]) continue;
+      store.results[key] = {
+        era: company.era,
+        companyId: company.id,
+        winnerTeamKey: null,
+        status: "skipped-uninvested",
+        closedAt
+      };
+    }
+    const settlement = settleBankingDecade(store);
+    skipped.push({ era: settlement.eraName, decade: settlement.decade });
+  }
+
+  const closedAt = new Date().toISOString();
+  let expiredLoanRequests = 0;
+  for (const loan of store.loans) {
+    if (loan.status !== "pending_lender" && loan.status !== "pending_admin") continue;
+    loan.status = "expired_at_fast_forward";
+    loan.closedAt = closedAt;
+    expiredLoanRequests += 1;
+  }
+  const target = currentBankingGroup(store);
+  return {
+    target: { era: target.eraName, decade: target.group.decade },
+    skippedDecades: skipped,
+    expiredLoanRequests
+  };
+}
+
 function serveAsset(response, filename, contentType) {
   try {
     const body = fs.readFileSync(path.join(ROOT, filename));
@@ -1645,6 +1703,10 @@ async function handle(request, response) {
         ready: bankingSetupErrors().length === 0,
         setupErrors: bankingSetupErrors(),
         complete: store.banking.complete,
+        fastForwardAvailable: !store.banking.complete && (
+          store.banking.activeEraIndex < 2
+          || store.banking.activeEraIndex === 2 && store.banking.decadeIndex < 9
+        ),
         eraIndex: store.banking.activeEraIndex,
         decadeIndex: store.banking.decadeIndex,
         current: current?.group ? {
@@ -1718,6 +1780,13 @@ async function handle(request, response) {
       }
       writeStore(store);
       return sendJson(response, 200, { loan: sanitizeLoan(loan, "admin") });
+    }
+
+    if (request.method === "POST" && pathname === "/api/admin/banking/fast-forward-era-three-final-decade") {
+      const store = readStore();
+      const result = fastForwardToEraThreeFinalDecade(store);
+      writeStore(store);
+      return sendJson(response, 200, result);
     }
 
     if (request.method === "POST" && pathname === "/api/admin/banking/settle-decade") {

@@ -510,13 +510,17 @@ function renderBloodlines(state, draftOverride = null) {
     const effect = document.createElement("p");
     effect.className = "bloodlines-news-effect";
     effect.textContent = `EFFECT · ${item.effect || "No effect details provided"}`;
+    const shift = document.createElement("p");
+    shift.className = "bloodlines-news-effect";
+    const shiftValue = Number(item.returnShiftPercent || 0);
+    shift.textContent = `RETURN SHIFT · ${shiftValue > 0 ? "+" : ""}${shiftValue}%`;
     const affectedNames = (item.affectedInstrumentIds || []).map((id) => (
       state.instruments.find((instrument) => instrument.id === id)?.name
     )).filter(Boolean);
     const affected = document.createElement("span");
     affected.className = "bloodlines-news-targets";
     affected.textContent = `AFFECTS · ${affectedNames.join(" · ") || "Not specified"}`;
-    article.append(number, text, effect, affected);
+    article.append(number, text, effect, shift, affected);
     news.append(article);
   }
   const market = document.querySelector("#bloodlines-market");
@@ -529,9 +533,14 @@ function renderBloodlines(state, draftOverride = null) {
     returns.className = "bloodlines-market-prices";
     for (const instrument of state.instruments) {
       const item = document.createElement("span");
-      const annualReturn = Number(state.annualReturns?.[instrument.id]);
-      const label = instrument.type === "fd" ? "annual FD rate" : "annual return";
-      item.textContent = `${instrument.name} · ${Number.isFinite(annualReturn) ? `${annualReturn > 0 ? "+" : ""}${annualReturn.toFixed(2)}% ${label}` : "return not set"}`;
+      const returnRange = state.returnRanges?.[instrument.id];
+      const formatPercent = (value) => String(Number(Number(value).toFixed(2)));
+      const rangeText = returnRange
+        ? returnRange.min === returnRange.max
+          ? `${formatPercent(returnRange.min)}%`
+          : `${formatPercent(returnRange.min)}-${formatPercent(returnRange.max)}%`
+        : "return not set";
+      item.textContent = `${instrument.name} · ${rangeText}`;
       returns.append(item);
     }
     market.append(returnHeading, returns);

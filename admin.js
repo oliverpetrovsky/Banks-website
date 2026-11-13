@@ -200,6 +200,7 @@ function renderBankingProgress(state, auctionStatus) {
   const message = document.querySelector("#banking-message");
   const errors = document.querySelector("#banking-errors");
   const settleButton = document.querySelector("#banking-settle-decade");
+  const fastForwardButton = document.querySelector("#banking-fast-forward");
   const teams = document.querySelector("#banking-team-balances");
   const result = document.querySelector("#banking-settlement-result");
   const startButton = document.querySelector("#auction-control-form").querySelector('button[type="submit"]');
@@ -210,6 +211,8 @@ function renderBankingProgress(state, auctionStatus) {
     item.textContent = text;
     return item;
   }));
+  fastForwardButton.hidden = !state.fastForwardAvailable;
+  fastForwardButton.disabled = !state.ready || auctionStatus === "open";
   if (!state.current) {
     period.textContent = state.complete ? "Round 1 is complete" : "No active era";
     progress.textContent = state.complete ? "COMPLETE" : "NOT READY";
@@ -546,6 +549,9 @@ function renderBloodlinesAdmin(state, scoreboard) {
 
   const controls = {
     start: !state.started,
+    skip_missing_allocations: state.started
+      && ["allocation", "reallocation"].includes(state.stage)
+      && state.teams.some((team) => state.stage === "reallocation" ? !team.reallocated : !team.submitted),
     begin_news: state.started && state.stage === "allocation" && state.teams.length > 0 && state.teams.every((team) => team.submitted),
     begin_wheel: state.started && state.stage === "news" && state.newsRemaining === 0,
     spin_next: state.started && state.stage === "wheel" && !state.wheel.current && state.wheel.entries.some((entry) => entry.status === "waiting"),
@@ -554,6 +560,9 @@ function renderBloodlinesAdmin(state, scoreboard) {
   };
   document.querySelectorAll("[data-bloodlines-action]").forEach((button) => {
     button.hidden = !controls[button.dataset.bloodlinesAction];
+    if (button.dataset.bloodlinesAction === "skip_missing_allocations") {
+      button.textContent = state.stage === "reallocation" ? "ASSUME NO REALLOCATION" : "ASSUME NO ALLOCATION";
+    }
     button.disabled = button.dataset.bloodlinesAction === "spin_next"
       ? Boolean(state.wheel.current)
       : button.dataset.bloodlinesAction === "start" && !state.returnsConfigured;
@@ -594,24 +603,51 @@ function renderBloodlinesAdmin(state, scoreboard) {
   const returnOptions = document.querySelector("#bloodlines-return-options");
   if (!returnsForm.dataset.dirty) {
     returnOptions.replaceChildren(...state.instruments.map((instrument) => {
-      const label = document.createElement("label");
-      label.className = "bloodlines-return-option";
+      const option = document.createElement("div");
+      option.className = "bloodlines-return-option";
       const caption = document.createElement("span");
-      caption.textContent = `${instrument.name} · annual %`;
-      const input = document.createElement("input");
-      input.type = "number";
-      input.name = `return-${instrument.id}`;
-      input.min = "-99.99";
-      input.max = "1000";
-      input.step = "0.01";
-      input.required = true;
-      input.value = state.annualReturns?.[instrument.id] ?? "";
-      input.dataset.returnInstrument = instrument.id;
-      input.setAttribute("aria-label", `${instrument.name} annual return percentage`);
-      label.append(caption, input);
-      return label;
+      caption.textContent = instrument.name;
+      const fields = document.createElement("div");
+      fields.className = "bloodlines-return-fields";
+      const saved = state.annualReturns?.[instrument.id];
+      const value = typeof saved === "number" ? { min: saved, max: saved, actual: saved } : saved || {};
+      for (const [field, labelText] of [["min", "RANGE FROM %"], ["max", "RANGE TO %"], ["actual", "REAL ANNUAL %"]]) {
+        const label = document.createElement("label");
+        label.textContent = labelText;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "-99.99";
+        input.max = "1000";
+        input.step = "0.01";
+        input.required = true;
+        input.value = value[field] ?? "";
+        input.dataset.returnInstrument = instrument.id;
+        input.dataset.returnField = field;
+        input.setAttribute("aria-label", `${instrument.name} ${labelText.toLowerCase()}`);
+        label.append(input);
+        fields.append(label);
+      }
+      option.append(caption, fields);
+      return option;
     }));
   }
+  const effectiveReturnsSection = document.querySelector("#bloodlines-effective-returns-section");
+  const effectiveReturns = document.querySelector("#bloodlines-effective-returns");
+  effectiveReturnsSection.hidden = !state.started || !state.returnsConfigured;
+  effectiveReturns.replaceChildren(...state.instruments.map((instrument) => {
+    const item = document.createElement("span");
+    const value = state.effectiveReturns?.[instrument.id];
+    if (!value) {
+      item.textContent = `${instrument.name} · not set`;
+      return item;
+    }
+    const min = Number(value.min.toFixed(2));
+    const max = Number(value.max.toFixed(2));
+    const range = min === max ? `${min}%` : `${min}-${max}%`;
+    const actual = Number(value.actual.toFixed(2));
+    item.textContent = `${instrument.name} · RANGE ${range} · ACTUAL ${actual}%`;
+    return item;
+  }));
   const newsForm = document.querySelector("#bloodlines-news-form");
   newsForm.hidden = !state.started || state.stage !== "news" || state.newsRemaining === 0;
   document.querySelector("#bloodlines-news-label").textContent = `YEAR ${state.year} NEWS FLASH`;
@@ -742,6 +778,8 @@ async function kickBloodlinesTeam(event) {
 
 async function runBloodlinesAction(event) {
   const button = event.currentTarget;
+  if (button.dataset.bloodlinesAction === "skip_missing_allocations"
+      && !window.confirm("Treat every team without a submission as making no trades? Existing portfolios stay unchanged; teams that do not submit an initial allocation or reallocation will keep their cash and holdings.")) return;
   button.disabled = true;
   try {
     await api("/api/bloodlines/admin/advance", {
@@ -779,10 +817,11 @@ async function saveBloodlinesSchedule(event) {
 async function saveBloodlinesReturns(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const returns = Object.fromEntries([...form.querySelectorAll("[data-return-instrument]")].map((input) => [
-    input.dataset.returnInstrument,
-    Number(input.value)
-  ]));
+  const returns = {};
+  for (const input of form.querySelectorAll("[data-return-instrument]")) {
+    returns[input.dataset.returnInstrument] ||= {};
+    returns[input.dataset.returnInstrument][input.dataset.returnField] = Number(input.value);
+  }
   try {
     await api("/api/bloodlines/admin/advance", {
       method: "POST",
@@ -808,6 +847,7 @@ async function releaseBloodlinesNews(event) {
         action: "release_news",
         text: form.elements.text.value,
         effect: form.elements.effect.value,
+        returnShiftPercent: Number(form.elements.returnShiftPercent.value),
         affectedInstrumentIds: [...form.querySelectorAll("[name=affectedInstrumentIds]:checked")].map((input) => input.value)
       })
     });
@@ -876,6 +916,27 @@ async function settleBankingDecade() {
   }
 }
 
+async function fastForwardBanking() {
+  const button = document.querySelector("#banking-fast-forward");
+  const confirmed = window.confirm(
+    "Skip all remaining Round 1 decades through Era 3's final decade? Unauctioned companies will be marked uninvested. Cash growth, existing company settlements, and scheduled loan payments will be processed normally; unpaid installments can still default. Unresolved loan requests will expire. Era 3's final decade will remain open for normal play."
+  );
+  if (!confirmed) return;
+  button.disabled = true;
+  try {
+    const result = await api("/api/admin/banking/fast-forward-era-three-final-decade", {
+      method: "POST",
+      body: "{}"
+    });
+    await refreshDashboard();
+    showToast(`Skipped ${result.skippedDecades.length} decades to ${result.target.era} · ${result.target.decade}.`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function closeRoundOne() {
   const button = document.querySelector("#round-one-closeout-submit");
   if (!adminState.qualificationSelection.size) return;
@@ -933,6 +994,7 @@ async function initialize() {
   document.querySelector("#close-auction").addEventListener("click", closeAuction);
   document.querySelector("#admin-refresh").addEventListener("click", refreshDashboard);
   document.querySelector("#banking-settle-decade").addEventListener("click", settleBankingDecade);
+  document.querySelector("#banking-fast-forward").addEventListener("click", fastForwardBanking);
   document.querySelector("#round-one-closeout-submit").addEventListener("click", closeRoundOne);
   document.querySelector("#round-one-qualifier-list").addEventListener("change", (event) => {
     if (!event.target.matches("[data-qualifier-key]")) return;

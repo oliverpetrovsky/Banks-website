@@ -187,23 +187,61 @@ function validateSchedule(schedule) {
 
 function validateReturns(returns) {
   if (!returns || typeof returns !== "object" || Array.isArray(returns)) {
-    throw new Error("Set an annual return for every investment option.");
+    throw new Error("Set a return range and actual annual return for every investment option.");
   }
   const normalized = {};
   for (const instrument of INSTRUMENTS) {
-    const value = Number(returns[instrument.id]);
-    if (returns[instrument.id] === undefined || returns[instrument.id] === ""
-        || !Number.isFinite(value) || value <= -100 || value > 1000) {
-      throw new Error(`${instrument.name} needs a return greater than -100% and no more than 1000%.`);
+    const raw = returns[instrument.id];
+    const legacy = typeof raw === "number" || typeof raw === "string";
+    const min = Number(legacy ? raw : raw?.min);
+    const max = Number(legacy ? raw : raw?.max);
+    const actual = Number(legacy ? raw : raw?.actual);
+    if (raw === undefined || raw === "" || !Number.isFinite(min) || !Number.isFinite(max)
+        || !Number.isFinite(actual) || min <= -100 || max > 1000 || actual <= -100 || actual > 1000 || min > max) {
+      throw new Error(`${instrument.name} needs a valid return range and an actual return between -100% and 1000%.`);
     }
-    normalized[instrument.id] = Math.round(value * 100) / 100;
+    normalized[instrument.id] = {
+      min: Math.round(min * 100) / 100,
+      max: Math.round(max * 100) / 100,
+      actual: Math.round(actual * 100) / 100
+    };
   }
   return normalized;
 }
 
 function hasConfiguredReturns(state, subround = state.activeSubround) {
   const returns = state.returnsBySubround[subround];
-  return Boolean(returns && INSTRUMENTS.every((instrument) => Number.isFinite(returns[instrument.id])));
+  return Boolean(returns && INSTRUMENTS.every((instrument) => {
+    const value = returns[instrument.id];
+    return typeof value === "number"
+      ? Number.isFinite(value)
+      : Number.isFinite(value?.min) && Number.isFinite(value?.max) && Number.isFinite(value?.actual);
+  }));
+}
+
+function configuredReturn(state, subround, instrumentId) {
+  const value = state.returnsBySubround[subround]?.[instrumentId];
+  if (typeof value === "number") return { min: value, max: value, actual: value };
+  return value || null;
+}
+
+function returnShiftForYear(state, subround, instrumentId, year) {
+  return Object.values(state.newsBySubround[subround] || {}).reduce((total, news) => (
+    news.year <= year && news.affectedInstrumentIds?.includes(instrumentId)
+      ? total + Number(news.returnShiftPercent || 0)
+      : total
+  ), 0);
+}
+
+function effectiveReturnForYear(state, subround, instrumentId, year) {
+  const configured = configuredReturn(state, subround, instrumentId);
+  if (!configured) return null;
+  const shift = returnShiftForYear(state, subround, instrumentId, year);
+  return {
+    min: Math.round((configured.min + shift) * 100) / 100,
+    max: Math.round((configured.max + shift) * 100) / 100,
+    actual: Math.round((configured.actual + shift) * 100) / 100
+  };
 }
 
 function applyConfiguredReturns(market, state) {
@@ -216,7 +254,7 @@ function applyConfiguredReturns(market, state) {
     let previousPrice = instrument.startPrice;
     for (let year = 1; year <= SIMULATION_YEARS; year += 1) {
       const subround = state.schedule.findIndex((range) => year >= range.start && year <= range.end) + 1;
-      const annualReturn = state.returnsBySubround[subround]?.[instrument.id];
+      const annualReturn = effectiveReturnForYear(state, subround, instrument.id, year)?.actual;
       if (Number.isFinite(annualReturn)) {
         previousPrice = Math.max(0.01, Math.round(previousPrice * (1 + annualReturn / 100) * 100) / 100);
         values[year - 1] = previousPrice;
@@ -325,7 +363,7 @@ function applyAllocation(state, account, allocation, market, windowType) {
         account.cash -= quantity;
         account.deposits.push({
           principal: quantity,
-          rate: (state.returnsBySubround[subround]?.[instrument.id] ?? instrument.rate * 100) / 100,
+          rate: (effectiveReturnForYear(state, subround, instrument.id, Math.max(1, year))?.actual ?? instrument.rate * 100) / 100,
           term,
           purchaseYear: Math.max(1, year),
           maturityYear: Math.max(1, year) + term,
@@ -544,7 +582,10 @@ function publicState(state, teamKey, market) {
       ? { salary: market.household.salary[latestReleasedYear - 1], expenses: market.household.expenses[latestReleasedYear - 1] }
       : { salary: market.household.salary[range.start - 1], expenses: market.household.expenses[range.start - 1] },
     instruments: INSTRUMENTS,
-    annualReturns: state.returnsBySubround[state.activeSubround] || {},
+    returnRanges: Object.fromEntries(INSTRUMENTS.map((instrument) => {
+      const currentReturn = effectiveReturnForYear(state, state.activeSubround, instrument.id, priceYear);
+      return [instrument.id, currentReturn ? { min: currentReturn.min, max: currentReturn.max } : null];
+    })),
     tradePrices: Object.fromEntries(INSTRUMENTS.filter((item) => item.type !== "fd")
       .map((item) => [item.id, tradePrice(market, item, priceYear)])),
     insurance: INSURANCE,
@@ -564,7 +605,9 @@ function publicState(state, teamKey, market) {
     allocation,
     submitted: Boolean(allocation),
     status: open ? "trading" : "viewing",
-    score: state.published ? netWorth(account, market) : null,
+    score: state.started
+      ? Math.round(netWorth(account, market, priceYear) * 100) / 100
+      : null,
     completed: state.completed,
     visibleYear: latestReleasedYear || range.start
   };
@@ -636,6 +679,33 @@ function advance(state, data, session, market, registeredTeams) {
     });
     return;
   }
+  if (data.action === "skip_missing_allocations") {
+    const windowType = state.activeStage === "allocation"
+      ? "initial"
+      : state.activeStage === "reallocation" ? "reallocation" : null;
+    if (!windowType) throw new Error("Missing allocations can only be skipped during an allocation window.");
+    if (windowType === "initial" && !hasConfiguredReturns(state)) {
+      throw new Error("Set this sub-round's returns before skipping missing allocations.");
+    }
+    for (const key of state.teamOrder) {
+      const account = state.teams[key];
+      const window = account.allocationWindows[state.activeSubround]?.[windowType];
+      if (!window) throw new Error(`The ${windowType} allocation window for ${account.name} is not open.`);
+      if (window.allocation) continue;
+      if (windowType === "initial") {
+        applyAllocation(state, account, { trades: [], insurance: [] }, market, windowType);
+      } else {
+        window.allocation = {
+          trades: [],
+          insurance: [...account.currentInsurance],
+          submittedAt: new Date().toISOString()
+        };
+        account.nextInsurance = [...account.currentInsurance];
+      }
+      appendAudit(state, session, data.action, key, { subround: state.activeSubround, windowType });
+    }
+    return;
+  }
   if (data.action === "start") {
     if (state.started) throw new Error("Bloodlines has already started.");
     if (!hasConfiguredReturns(state, 1)) throw new Error("Set annual returns for all investment options before starting Bloodlines.");
@@ -673,12 +743,28 @@ function advance(state, data, session, market, registeredTeams) {
     const affectedInstrumentIds = Array.isArray(data.affectedInstrumentIds)
       ? [...new Set(data.affectedInstrumentIds)]
       : [];
+    const returnShiftPercent = Number(data.returnShiftPercent);
     if (!effect || effect.length > 300) throw new Error("Describe the news effect in 1–300 characters.");
     if (!affectedInstrumentIds.length || affectedInstrumentIds.some((id) => !INSTRUMENTS.some((instrument) => instrument.id === id))) {
       throw new Error("Select at least one affected investment option.");
     }
+    if (!Number.isFinite(returnShiftPercent) || returnShiftPercent < -1000 || returnShiftPercent > 1000) {
+      throw new Error("Enter a return shift between -1000% and 1000%.");
+    }
     const year = state.currentYear;
     if (state.newsBySubround[state.activeSubround]?.[year]) throw new Error(`Year ${year} has already been released.`);
+    for (const instrumentId of affectedInstrumentIds) {
+      const configured = configuredReturn(state, state.activeSubround, instrumentId);
+      if (!configured) throw new Error("The sub-round return settings are missing for an affected investment.");
+      const shift = returnShiftForYear(state, state.activeSubround, instrumentId, year) + returnShiftPercent;
+      const min = configured.min + shift;
+      const max = configured.max + shift;
+      const actual = configured.actual + shift;
+      if (min <= -100 || max > 1000 || actual <= -100 || actual > 1000) {
+        const instrument = INSTRUMENTS.find((item) => item.id === instrumentId);
+        throw new Error(`${instrument.name} would exceed the allowed return bounds after this news shift.`);
+      }
+    }
     for (const key of state.teamOrder) processYear(state, state.teams[key], market, year);
     state.newsBySubround[state.activeSubround] ||= {};
     state.newsBySubround[state.activeSubround][year] = {
@@ -686,6 +772,7 @@ function advance(state, data, session, market, registeredTeams) {
       text,
       effect,
       affectedInstrumentIds,
+      returnShiftPercent,
       releasedAt: new Date().toISOString()
     };
     state.currentYear += 1;
@@ -886,6 +973,15 @@ async function handle(request, res, pathname, session, registeredTeams = []) {
       years: state.schedule[state.activeSubround - 1],
       instruments: INSTRUMENTS,
       annualReturns: state.returnsBySubround[state.activeSubround] || null,
+      effectiveReturns: Object.fromEntries(INSTRUMENTS.map((instrument) => [
+        instrument.id,
+        effectiveReturnForYear(
+          state,
+          state.activeSubround,
+          instrument.id,
+          Math.min(state.currentYear, state.schedule[state.activeSubround - 1].end)
+        )
+      ])),
       returnsConfigured: hasConfiguredReturns(state),
       returnsLocked: state.activeStage !== "allocation" || state.teamOrder.some((key) => (
         state.teams[key].allocationWindows[state.activeSubround]?.initial?.allocation
