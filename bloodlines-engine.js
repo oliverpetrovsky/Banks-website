@@ -102,9 +102,8 @@ function newTeam(team) {
 function readMarket() {
   try {
     const market = JSON.parse(fs.readFileSync(MARKET_FILE, "utf8"));
-    if (!market?.prices?.equities || !market?.prices?.funds || !market.prices.gold
-        || !market.household || !market.household.salary || !market.household.expenses) {
-      throw new Error("Market file must include annual asset prices and household salary/expense schedules.");
+    if (!market?.household || !market.household.salary || !market.household.expenses) {
+      throw new Error("Market file must include household salary and expense schedules.");
     }
     const expandSeries = (series) => {
       if (Array.isArray(series)) {
@@ -125,11 +124,17 @@ function readMarket() {
       }
       return values;
     };
-    for (const instrument of INSTRUMENTS.filter((item) => ["equity", "fund"].includes(item.type))) {
-      const prices = instrument.type === "equity" ? market.prices.equities : market.prices.funds;
-      prices[instrument.id] = expandSeries(prices[instrument.id]);
+    market.prices = { equities: {}, funds: {}, gold: [] };
+    for (const instrument of INSTRUMENTS.filter((item) => item.type !== "fd")) {
+      const prices = instrument.type === "equity"
+        ? market.prices.equities
+        : instrument.type === "fund"
+          ? market.prices.funds
+          : null;
+      const initialPrices = Array(SIMULATION_YEARS).fill(instrument.startPrice);
+      if (prices) prices[instrument.id] = initialPrices;
+      else market.prices.gold = initialPrices;
     }
-    market.prices.gold = expandSeries(market.prices.gold);
     market.household.salary = expandSeries(market.household.salary);
     market.household.expenses = expandSeries(market.household.expenses);
     if (!Number.isFinite(market.household.startingCash) || market.household.startingCash < 0) {
@@ -279,10 +284,8 @@ function applyConfiguredReturns(market, state) {
       const annualReturn = effectiveReturnForYear(state, subround, instrument.id, year)?.actual;
       if (Number.isFinite(annualReturn)) {
         previousPrice = Math.max(0.01, Math.round(previousPrice * (1 + annualReturn / 100) * 100) / 100);
-        values[year - 1] = previousPrice;
-      } else {
-        previousPrice = values[year - 1];
       }
+      values[year - 1] = previousPrice;
     }
   }
 }

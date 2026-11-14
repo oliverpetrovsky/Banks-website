@@ -1,22 +1,13 @@
 {
-  "prices": {
-    "equities": {
-      "TECH": { "start": 1200, "annualGrowth": 0.045 },
-      "AUTO": { "start": 800, "annualGrowth": 0.035 },
-      "HLTH": { "start": 950, "annualGrowth": 0.04 },
-      "AI": { "start": 450, "annualGrowth": 0.065 },
-      "RET": { "start": 500, "annualGrowth": 0.03 }
-    },
-    "funds": {
-      "fund-meridian": { "start": 100, "annualGrowth": 0.055 },
-      "fund-ignis": { "start": 100, "annualGrowth": 0.07 },
-      "fund-sentinel": { "start": 100, "annualGrowth": 0.04 }
-    },
-    "gold": { "start": 6000, "annualGrowth": 0.045 }
-  },
   "household": {
     "startingCash": 600000,
-    "salary": { "start": 900000, "annualGrowth": 0.05 },
-    "expenses": { "start": 650000, "annualGrowth": 0.04 }
+    "salary": {
+      "start": 900000,
+      "annualGrowth": 0.05
+    },
+    "expenses": {
+      "start": 650000,
+      "annualGrowth": 0.04
+    }
   }
 }
